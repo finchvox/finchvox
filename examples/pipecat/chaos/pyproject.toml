@@ -10,3 +10,4 @@ dependencies = [
 
 [tool.uv.sources]
 finchvox = { path = "../../..", editable = true }
+pipecat-ai = { path = "/Users/derek/projects/pipecat", editable = true }

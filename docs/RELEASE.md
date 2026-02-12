@@ -61,7 +61,7 @@ ls -lh dist/
 ## Upload to PyPI
 
 ```bash
- uv publish dist/*
+UV_PUBLISH_TOKEN=$(grep UV_PUBLISH_TOKEN .env | cut -d= -f2) uv publish dist/*
 ```
 
 Enter your PyPI API token when prompted.
