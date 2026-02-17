@@ -925,7 +925,7 @@ wheels = [
 
 [[package]]
 name = "finchvox"
-version = "0.0.12"
+version = "0.0.13"
 source = { editable = "." }
 dependencies = [
     { name = "aiofiles" },
@@ -939,6 +939,7 @@ dependencies = [
     { name = "opentelemetry-instrumentation-logging" },
     { name = "opentelemetry-proto" },
     { name = "opentelemetry-sdk" },
+    { name = "packaging" },
     { name = "pipecat-ai", extra = ["cartesia", "daily", "deepgram", "silero"] },
     { name = "protobuf" },
     { name = "python-multipart" },
@@ -968,6 +969,7 @@ requires-dist = [
     { name = "opentelemetry-instrumentation-logging", specifier = ">=0.48b0" },
     { name = "opentelemetry-proto", specifier = ">=1.27.0" },
     { name = "opentelemetry-sdk", specifier = ">=1.27.0" },
+    { name = "packaging", specifier = ">=21.0" },
     { name = "pipecat-ai", extras = ["cartesia", "daily", "deepgram", "silero"], specifier = ">=0.0.98" },
     { name = "pre-commit", marker = "extra == 'dev'", specifier = ">=4.0.0" },
     { name = "protobuf", specifier = ">=4.25.0" },

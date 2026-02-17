@@ -3,7 +3,7 @@ import io
 import json
 import wave
 from datetime import datetime
-from typing import Optional
+from typing import TYPE_CHECKING, Optional
 
 import aiohttp
 from loguru import logger
@@ -22,9 +22,16 @@ from pipecat.processors.frame_processor import (
     FrameProcessor,
     FrameProcessorSetup,
 )
-from pipecat.utils.tracing.conversation_context_provider import (
-    ConversationContextProvider,
-)
+
+from finchvox.compat import HAS_NEW_TRACING_API
+
+if TYPE_CHECKING:
+    from pipecat.utils.tracing.tracing_context import TracingContext
+
+if not HAS_NEW_TRACING_API:
+    from pipecat.utils.tracing.conversation_context_provider import (
+        ConversationContextProvider,
+    )
 
 
 def _is_finchvox_initialized() -> bool:
@@ -85,6 +92,7 @@ class FinchvoxProcessor(FrameProcessor):
         self._chunk_counter = 0
         self._setup_info: Optional[FrameProcessorSetup] = None
         self._input_frame_count = 0
+        self._tracing_context: Optional["TracingContext"] = None
 
     async def setup(self, setup: FrameProcessorSetup):
         await super().setup(setup)
@@ -143,6 +151,13 @@ class FinchvoxProcessor(FrameProcessor):
             )
             self._disabled = True
             return
+
+        if HAS_NEW_TRACING_API:
+            self._tracing_context = getattr(frame, "tracing_context", None)
+            if self._tracing_context:
+                import finchvox
+
+                finchvox.set_tracing_context(self._tracing_context)
 
         self._audio_buffer = AudioBufferProcessor(
             sample_rate=self._sample_rate,
@@ -212,19 +227,31 @@ class FinchvoxProcessor(FrameProcessor):
             except Exception as e:
                 logger.error(f"Failed to process audio chunk: {e}", exc_info=True)
 
+    def _extract_trace_id_from_context(self, ctx) -> Optional[str]:
+        if not ctx:
+            return None
+        span = trace.get_current_span(ctx)
+        span_context = span.get_span_context()
+        if span_context.trace_id == 0:
+            return None
+        return format(span_context.trace_id, "032x")
+
     def _get_trace_id(self) -> str:
         try:
-            context_provider = ConversationContextProvider.get_instance()
-            conversation_context = context_provider.get_current_conversation_context()
-
-            if conversation_context:
-                span = trace.get_current_span(conversation_context)
-                span_context = span.get_span_context()
-                if span_context.trace_id != 0:
-                    return format(span_context.trace_id, "032x")
+            if HAS_NEW_TRACING_API:
+                ctx = (
+                    self._tracing_context.get_conversation_context()
+                    if self._tracing_context
+                    else None
+                )
+            else:
+                provider = ConversationContextProvider.get_instance()
+                ctx = provider.get_current_conversation_context()
+            trace_id = self._extract_trace_id_from_context(ctx)
+            if trace_id:
+                return trace_id
         except Exception:
             pass
-
         return "no_trace"
 
     async def _upload_chunk(

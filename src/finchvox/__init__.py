@@ -1,6 +1,7 @@
 import logging
 from importlib.metadata import version
 from pathlib import Path
+from typing import TYPE_CHECKING, Optional
 
 from loguru import logger
 from opentelemetry import trace as otel_trace
@@ -8,9 +9,22 @@ from opentelemetry.sdk.trace import TracerProvider
 
 from finchvox.environment import EnvironmentSpanProcessor, capture_environment
 
+if TYPE_CHECKING:
+    from pipecat.utils.tracing.tracing_context import TracingContext
+
 _initialized = False
 _allowed_log_modules: set[str] = {"pipecat.", "finchvox.", "__main__"}
 _app_root: Path | None = None
+_current_tracing_context: Optional["TracingContext"] = None
+
+
+def set_tracing_context(ctx: "TracingContext") -> None:
+    global _current_tracing_context
+    _current_tracing_context = ctx
+
+
+def get_tracing_context() -> Optional["TracingContext"]:
+    return _current_tracing_context
 
 
 def init(
@@ -75,30 +89,33 @@ def init(
     )
 
 
-def _is_allowed_source(module: str, pathname: str | None) -> bool:
-    """Check if a log source should be captured.
-
-    A source is allowed if:
-    1. The module name matches an allowed prefix (pipecat., finchvox., __main__), OR
-    2. The file path is within the app_root directory (excluding site-packages, .venv)
-    """
+def _matches_allowed_module(module: str) -> bool:
     for prefix in _allowed_log_modules:
-        if prefix == "__main__":
-            if module == "__main__":
-                return True
-        elif module.startswith(prefix):
+        if prefix == "__main__" and module == "__main__":
             return True
+        if prefix != "__main__" and module.startswith(prefix):
+            return True
+    return False
 
-    if pathname and _app_root:
-        try:
-            path = Path(pathname).resolve()
-            if path.is_relative_to(_app_root):
-                path_str = str(path)
-                if "site-packages" not in path_str and "/.venv/" not in path_str:
-                    return True
-        except (ValueError, OSError):
-            pass
 
+def _is_path_in_app_root(pathname: str) -> bool:
+    if not _app_root:
+        return False
+    try:
+        path = Path(pathname).resolve()
+        if not path.is_relative_to(_app_root):
+            return False
+        path_str = str(path)
+        return "site-packages" not in path_str and "/.venv/" not in path_str
+    except (ValueError, OSError):
+        return False
+
+
+def _is_allowed_source(module: str, pathname: str | None) -> bool:
+    if _matches_allowed_module(module):
+        return True
+    if pathname and _is_path_in_app_root(pathname):
+        return True
     return False
 
 
@@ -164,15 +181,7 @@ def _setup_log_capture(service_name: str, endpoint: str, insecure: bool) -> None
     logger.debug("OpenTelemetry log capture initialized")
 
 
-def _get_pipecat_context():
-    """Get current trace context from Pipecat's turn or conversation provider.
-
-    OpenTelemetry's LoggingInstrumentor reads trace context from thread-local
-    contextvars, but Pipecat stores the current turn's span context in a custom
-    singleton (TurnContextProvider). This function bridges the gap by retrieving
-    the context from Pipecat's providers so we can inject it into thread-local
-    storage before forwarding logs.
-    """
+def _get_legacy_pipecat_context():
     try:
         from pipecat.utils.tracing.turn_context_provider import get_current_turn_context
 
@@ -186,6 +195,18 @@ def _get_pipecat_context():
         return get_current_conversation_context()
     except ImportError:
         return None
+
+
+def _get_pipecat_context():
+    """Get current trace context from Pipecat's turn or conversation provider."""
+    from finchvox.compat import HAS_NEW_TRACING_API
+
+    if HAS_NEW_TRACING_API:
+        ctx = get_tracing_context()
+        if ctx:
+            return ctx.get_turn_context() or ctx.get_conversation_context()
+        return None
+    return _get_legacy_pipecat_context()
 
 
 def _setup_loguru_bridge() -> None:

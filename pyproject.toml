@@ -21,6 +21,7 @@ dependencies = [
     "pipecat-ai[cartesia,daily,deepgram,silero]>=0.0.98",
     "aiortc>=1.14.0",
     "apscheduler>=3.10.0",
+    "packaging>=21.0",
 ]
 
 [project.scripts]
