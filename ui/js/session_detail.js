@@ -47,6 +47,7 @@ function sessionDetailApp() {
         hoveredSpan: null,       // Span being hovered over (for chunk highlighting)
         chunkHoveredSpan: null,  // Span hovered from chunk (applies .selected to waterfall)
         isPanelOpen: false,      // Controls panel visibility and transitions
+        tracePanelWidth: 400,
 
         // Audio state
         wavesurfer: null,
@@ -85,6 +86,20 @@ function sessionDetailApp() {
             visible: false,
             time: 0,
             source: null  // 'waveform' or 'waterfall'
+        },
+
+        getActiveSidePanelWidth() {
+            if (this.isLogPanelOpen) return this.logPanelWidth;
+            if (this.isPanelOpen) return this.tracePanelWidth;
+            return 0;
+        },
+
+        getMainContentStyle() {
+            return `margin-right: ${this.getActiveSidePanelWidth()}px;`;
+        },
+
+        getHeaderInsetStyle() {
+            return `right: ${this.getActiveSidePanelWidth()}px;`;
         },
 
         async init() {
