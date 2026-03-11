@@ -25,14 +25,14 @@ function sessionsListApp() {
         },
 
         applySessionData(data) {
-            this.sessions = data.sessions || [];
-            this.dataDir = data.data_dir || '';
-            this.totalCount = data.total_count || 0;
-            this.totalPages = data.total_pages || 1;
-            this.pageSize = data.page_size || 50;
-            this.currentPage = data.page || 1;
-            this.hasPreviousPage = data.has_previous_page || false;
-            this.hasNextPage = data.has_next_page || false;
+            this.sessions = data.sessions;
+            this.dataDir = data.data_dir;
+            this.totalCount = data.total_count;
+            this.totalPages = data.total_pages;
+            this.pageSize = data.page_size;
+            this.currentPage = data.page;
+            this.hasPreviousPage = data.has_previous_page;
+            this.hasNextPage = data.has_next_page;
         },
 
         async loadSessions() {
