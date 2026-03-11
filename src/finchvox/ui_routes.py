@@ -11,6 +11,7 @@ from finchvox.audio_utils import find_chunks, combine_chunks
 from finchvox.conversation import Conversation
 from finchvox.metrics import Metrics
 from finchvox.session import Session
+from finchvox.session_repository import SessionRepository
 from finchvox.collector.config import (
     get_sessions_base_dir,
     get_session_dir,
@@ -71,30 +72,10 @@ def _get_combined_audio_file(
     return tmp_path, "audio/wav", True
 
 
-async def _handle_list_sessions(sessions_base_dir: Path) -> JSONResponse:
-    if not sessions_base_dir.exists():
-        return JSONResponse({"sessions": [], "data_dir": str(sessions_base_dir)})
-
-    sessions = []
-    for session_dir in sessions_base_dir.iterdir():
-        if not session_dir.is_dir():
-            continue
-
-        session_id = session_dir.name
-        trace_file = session_dir / f"trace_{session_id}.jsonl"
-
-        if not trace_file.exists():
-            continue
-
-        try:
-            session = Session(session_dir)
-            sessions.append(session.to_dict())
-        except Exception as e:
-            print(f"Error reading session {session_dir}: {e}")
-            continue
-
-    sessions.sort(key=lambda s: s.get("start_time") or 0, reverse=True)
-    return JSONResponse({"sessions": sessions, "data_dir": str(sessions_base_dir)})
+async def _handle_list_sessions(sessions_base_dir: Path, page: int = 1) -> JSONResponse:
+    repository = SessionRepository(sessions_base_dir)
+    result = repository.list_paginated(page)
+    return JSONResponse(result.to_dict())
 
 
 def _get_session(data_dir: Path, session_id: str) -> Session:
@@ -310,8 +291,8 @@ def register_ui_routes(app: FastAPI, data_dir: Path = None):
         return FileResponse(str(UI_DIR / "session_detail.html"))
 
     @app.get("/api/sessions")
-    async def list_sessions() -> JSONResponse:
-        return await _handle_list_sessions(sessions_base_dir)
+    async def list_sessions(page: int = 1) -> JSONResponse:
+        return await _handle_list_sessions(sessions_base_dir, page)
 
     @app.get("/api/sessions/{session_id}/trace")
     async def get_session_trace(session_id: str) -> JSONResponse:
