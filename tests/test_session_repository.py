@@ -28,6 +28,11 @@ def create_session(sessions_dir: Path, session_id: str, start_time_nano: int):
         f.write("\n")
 
 
+def create_sessions(sessions_dir: Path, count: int):
+    for i in range(count):
+        create_session(sessions_dir, f"session{i:03d}", i * 1000000000000000000)
+
+
 class TestSessionRepository:
     def test_empty_directory_returns_empty_result(self, temp_sessions_dir):
         repo = SessionRepository(temp_sessions_dir)
@@ -61,10 +66,7 @@ class TestSessionRepository:
         assert result.sessions[2]["session_id"] == "session1"
 
     def test_first_page_returns_correct_sessions(self, temp_sessions_dir):
-        for i in range(75):
-            create_session(
-                temp_sessions_dir, f"session{i:03d}", i * 1000000000000000000
-            )
+        create_sessions(temp_sessions_dir, 75)
 
         repo = SessionRepository(temp_sessions_dir, page_size=50)
         result = repo.list_paginated(page=1)
@@ -78,10 +80,7 @@ class TestSessionRepository:
         assert result.has_next_page is True
 
     def test_second_page_returns_remaining_sessions(self, temp_sessions_dir):
-        for i in range(75):
-            create_session(
-                temp_sessions_dir, f"session{i:03d}", i * 1000000000000000000
-            )
+        create_sessions(temp_sessions_dir, 75)
 
         repo = SessionRepository(temp_sessions_dir, page_size=50)
         result = repo.list_paginated(page=2)
@@ -110,8 +109,7 @@ class TestSessionRepository:
         assert result.page == 1
 
     def test_invalid_page_too_high_clamped_to_max(self, temp_sessions_dir):
-        for i in range(10):
-            create_session(temp_sessions_dir, f"session{i}", i * 1000000000000000000)
+        create_sessions(temp_sessions_dir, 10)
 
         repo = SessionRepository(temp_sessions_dir, page_size=5)
         result = repo.list_paginated(page=100)
@@ -120,10 +118,7 @@ class TestSessionRepository:
         assert result.total_pages == 2
 
     def test_total_pages_calculation(self, temp_sessions_dir):
-        for i in range(101):
-            create_session(
-                temp_sessions_dir, f"session{i:03d}", i * 1000000000000000000
-            )
+        create_sessions(temp_sessions_dir, 101)
 
         repo = SessionRepository(temp_sessions_dir, page_size=50)
         result = repo.list_paginated()

@@ -24,6 +24,17 @@ function sessionsListApp() {
             await this.loadSessions();
         },
 
+        applySessionData(data) {
+            this.sessions = data.sessions || [];
+            this.dataDir = data.data_dir || '';
+            this.totalCount = data.total_count || 0;
+            this.totalPages = data.total_pages || 1;
+            this.pageSize = data.page_size || 50;
+            this.currentPage = data.page || 1;
+            this.hasPreviousPage = data.has_previous_page || false;
+            this.hasNextPage = data.has_next_page || false;
+        },
+
         async loadSessions() {
             if (this.loading) return;
 
@@ -32,24 +43,12 @@ function sessionsListApp() {
 
             try {
                 const response = await fetch(`/api/sessions?page=${this.currentPage}`);
-
                 if (token !== this.requestToken) return;
-
-                const data = await response.json();
-                this.sessions = data.sessions || [];
-                this.dataDir = data.data_dir || '';
-                this.totalCount = data.total_count || 0;
-                this.totalPages = data.total_pages || 1;
-                this.pageSize = data.page_size || 50;
-                this.currentPage = data.page || 1;
-                this.hasPreviousPage = data.has_previous_page || false;
-                this.hasNextPage = data.has_next_page || false;
+                this.applySessionData(await response.json());
             } catch (error) {
                 console.error('Failed to load sessions:', error);
             } finally {
-                if (token === this.requestToken) {
-                    this.loading = false;
-                }
+                if (token === this.requestToken) this.loading = false;
             }
         },
 
