@@ -13,6 +13,12 @@ def temp_sessions_dir():
         yield Path(tmpdir) / "sessions"
 
 
+@pytest.fixture
+def single_session_dir(temp_sessions_dir):
+    create_session(temp_sessions_dir, "session1", 1000000000000000000)
+    return temp_sessions_dir
+
+
 def create_session(sessions_dir: Path, session_id: str, start_time_nano: int):
     session_dir = sessions_dir / session_id
     session_dir.mkdir(parents=True, exist_ok=True)
@@ -92,19 +98,10 @@ class TestSessionRepository:
         assert result.has_previous_page is True
         assert result.has_next_page is False
 
-    def test_invalid_page_zero_clamped_to_one(self, temp_sessions_dir):
-        create_session(temp_sessions_dir, "session1", 1000000000000000000)
-
-        repo = SessionRepository(temp_sessions_dir)
-        result = repo.list_paginated(page=0)
-
-        assert result.page == 1
-
-    def test_invalid_page_negative_clamped_to_one(self, temp_sessions_dir):
-        create_session(temp_sessions_dir, "session1", 1000000000000000000)
-
-        repo = SessionRepository(temp_sessions_dir)
-        result = repo.list_paginated(page=-5)
+    @pytest.mark.parametrize("invalid_page", [0, -1, -5])
+    def test_invalid_page_clamped_to_one(self, single_session_dir, invalid_page):
+        repo = SessionRepository(single_session_dir)
+        result = repo.list_paginated(page=invalid_page)
 
         assert result.page == 1
 
@@ -126,10 +123,8 @@ class TestSessionRepository:
         assert result.total_pages == 3
         assert result.total_count == 101
 
-    def test_single_session_returns_one_page(self, temp_sessions_dir):
-        create_session(temp_sessions_dir, "session1", 1000000000000000000)
-
-        repo = SessionRepository(temp_sessions_dir)
+    def test_single_session_returns_one_page(self, single_session_dir):
+        repo = SessionRepository(single_session_dir)
         result = repo.list_paginated()
 
         assert result.total_pages == 1
@@ -137,10 +132,8 @@ class TestSessionRepository:
         assert result.has_previous_page is False
         assert result.has_next_page is False
 
-    def test_to_dict_returns_all_fields(self, temp_sessions_dir):
-        create_session(temp_sessions_dir, "session1", 1000000000000000000)
-
-        repo = SessionRepository(temp_sessions_dir)
+    def test_to_dict_returns_all_fields(self, single_session_dir):
+        repo = SessionRepository(single_session_dir)
         result = repo.list_paginated()
         d = result.to_dict()
 

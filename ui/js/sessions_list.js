@@ -52,35 +52,36 @@ function sessionsListApp() {
             }
         },
 
+        isValidPageChange(page) {
+            return page >= 1 && page <= this.totalPages && page !== this.currentPage;
+        },
+
         async goToPage(page) {
-            if (page < 1 || page > this.totalPages || page === this.currentPage) return;
+            if (!this.isValidPageChange(page)) return;
             this.currentPage = page;
             await this.loadSessions();
         },
 
         async previousPage() {
-            if (this.hasPreviousPage) {
-                await this.goToPage(this.currentPage - 1);
-            }
+            await this.goToPage(this.currentPage - 1);
         },
 
         async nextPage() {
-            if (this.hasNextPage) {
-                await this.goToPage(this.currentPage + 1);
-            }
+            await this.goToPage(this.currentPage + 1);
+        },
+
+        formatSessionCount(count) {
+            const suffix = count !== 1 ? 's' : '';
+            return `${count} session${suffix}`;
         },
 
         get showingRangeText() {
             if (this.loading) return 'Loading...';
             if (this.totalCount === 0) return '0 sessions';
+            if (this.totalPages === 1) return this.formatSessionCount(this.totalCount);
 
             const start = (this.currentPage - 1) * this.pageSize + 1;
             const end = Math.min(this.currentPage * this.pageSize, this.totalCount);
-
-            if (this.totalPages === 1) {
-                return `${this.totalCount} session${this.totalCount !== 1 ? 's' : ''}`;
-            }
-
             return `Showing ${start}-${end} of ${this.totalCount} sessions`;
         },
 
