@@ -49,6 +49,93 @@ def create_session_with_logs(data_dir: Path, session_id: str, spans: list, logs:
                 f.write("\n")
 
 
+class TestListSessionsEndpoint:
+    def test_returns_empty_list_with_pagination_metadata_when_no_sessions(
+        self, client, temp_data_dir
+    ):
+        response = client.get("/api/sessions")
+
+        assert response.status_code == 200
+        data = response.json()
+        assert data["sessions"] == []
+        assert data["total_count"] == 0
+        assert data["total_pages"] == 1
+        assert data["page"] == 1
+        assert data["page_size"] == 50
+        assert data["has_previous_page"] is False
+        assert data["has_next_page"] is False
+        assert "data_dir" in data
+
+    def test_returns_sessions_with_all_pagination_fields(self, client, temp_data_dir):
+        session_id = "testsession123"
+        spans = [
+            {
+                "name": "test-span",
+                "start_time_unix_nano": 1000000000000000000,
+                "end_time_unix_nano": 2000000000000000000,
+            }
+        ]
+        create_session_with_logs(temp_data_dir, session_id, spans, logs=[])
+
+        response = client.get("/api/sessions")
+
+        assert response.status_code == 200
+        data = response.json()
+        assert len(data["sessions"]) == 1
+        assert data["sessions"][0]["session_id"] == session_id
+        assert data["total_count"] == 1
+        assert data["total_pages"] == 1
+        assert data["page"] == 1
+        assert data["has_previous_page"] is False
+        assert data["has_next_page"] is False
+
+    def test_respects_page_query_parameter(self, client, temp_data_dir):
+        for i in range(60):
+            session_id = f"session{i:03d}"
+            spans = [
+                {
+                    "name": "test-span",
+                    "start_time_unix_nano": i * 1000000000000000000,
+                    "end_time_unix_nano": i * 1000000000000000000 + 1000000000,
+                }
+            ]
+            create_session_with_logs(temp_data_dir, session_id, spans, logs=[])
+
+        response = client.get("/api/sessions?page=2")
+
+        assert response.status_code == 200
+        data = response.json()
+        assert len(data["sessions"]) == 10
+        assert data["total_count"] == 60
+        assert data["total_pages"] == 2
+        assert data["page"] == 2
+        assert data["has_previous_page"] is True
+        assert data["has_next_page"] is False
+
+    def test_invalid_page_defaults_to_valid_range(self, client, temp_data_dir):
+        session_id = "testsession123"
+        spans = [
+            {
+                "name": "test-span",
+                "start_time_unix_nano": 1000000000000000000,
+                "end_time_unix_nano": 2000000000000000000,
+            }
+        ]
+        create_session_with_logs(temp_data_dir, session_id, spans, logs=[])
+
+        response = client.get("/api/sessions?page=0")
+        assert response.status_code == 200
+        assert response.json()["page"] == 1
+
+        response = client.get("/api/sessions?page=-1")
+        assert response.status_code == 200
+        assert response.json()["page"] == 1
+
+        response = client.get("/api/sessions?page=999")
+        assert response.status_code == 200
+        assert response.json()["page"] == 1
+
+
 class TestGetLogsEndpoint:
     def test_returns_logs_for_valid_session(self, client, temp_data_dir):
         session_id = "abc123def456"

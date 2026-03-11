@@ -7,19 +7,82 @@ function sessionsListApp() {
         uploading: false,
         uploadError: null,
 
+        currentPage: 1,
+        totalCount: 0,
+        totalPages: 1,
+        pageSize: 50,
+        hasPreviousPage: false,
+        hasNextPage: false,
+        loading: false,
+
+        initialized: false,
+        requestToken: 0,
+
         async init() {
+            if (this.initialized) return;
+            this.initialized = true;
             await this.loadSessions();
         },
 
         async loadSessions() {
+            if (this.loading) return;
+
+            this.loading = true;
+            const token = ++this.requestToken;
+
             try {
-                const response = await fetch('/api/sessions');
+                const response = await fetch(`/api/sessions?page=${this.currentPage}`);
+
+                if (token !== this.requestToken) return;
+
                 const data = await response.json();
                 this.sessions = data.sessions || [];
                 this.dataDir = data.data_dir || '';
+                this.totalCount = data.total_count || 0;
+                this.totalPages = data.total_pages || 1;
+                this.pageSize = data.page_size || 50;
+                this.currentPage = data.page || 1;
+                this.hasPreviousPage = data.has_previous_page || false;
+                this.hasNextPage = data.has_next_page || false;
             } catch (error) {
                 console.error('Failed to load sessions:', error);
+            } finally {
+                if (token === this.requestToken) {
+                    this.loading = false;
+                }
             }
+        },
+
+        async goToPage(page) {
+            if (page < 1 || page > this.totalPages || page === this.currentPage) return;
+            this.currentPage = page;
+            await this.loadSessions();
+        },
+
+        async previousPage() {
+            if (this.hasPreviousPage) {
+                await this.goToPage(this.currentPage - 1);
+            }
+        },
+
+        async nextPage() {
+            if (this.hasNextPage) {
+                await this.goToPage(this.currentPage + 1);
+            }
+        },
+
+        get showingRangeText() {
+            if (this.loading) return 'Loading...';
+            if (this.totalCount === 0) return '0 sessions';
+
+            const start = (this.currentPage - 1) * this.pageSize + 1;
+            const end = Math.min(this.currentPage * this.pageSize, this.totalCount);
+
+            if (this.totalPages === 1) {
+                return `${this.totalCount} session${this.totalCount !== 1 ? 's' : ''}`;
+            }
+
+            return `Showing ${start}-${end} of ${this.totalCount} sessions`;
         },
 
         async uploadSession() {
