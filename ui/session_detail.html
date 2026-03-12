@@ -224,7 +224,7 @@
                                placeholder="Filter logs..."
                                class="bg-white/5 border border-white/10 rounded pl-9 pr-3 py-1.5 text-xs font-mono text-white placeholder-white/40 focus:outline-none focus:border-white/20 w-64">
                     </div>
-                    <span x-show="!logsLoading && logs.length > 0" class="text-white/40 text-xs">Showing <span x-text="getFilteredLogs().length"></span> of <span x-text="logs.length"></span> logs<span x-show="logsTotalCount > logsLimit"> (limited to <span x-text="logsLimit"></span>)</span></span>
+                    <span x-show="!logsLoading && logs.length > 0" class="text-white/40 text-xs">Showing <span x-text="getFilteredLogs().length"></span> of <span x-text="logsTotalCount"></span> logs</span>
                 </div>
                 <div class="flex gap-1">
                     <template x-for="level in ['DEBUG', 'INFO', 'WARN', 'ERROR']" :key="level">
