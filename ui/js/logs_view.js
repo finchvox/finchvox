@@ -83,10 +83,6 @@ function logsViewMixin() {
             }
         },
 
-        resetLogPanelWidth() {
-            this.setLogPanelWidth(DEFAULT_LOG_PANEL_WIDTH_PX, { persist: true });
-        },
-
         startLogPanelResize(event) {
             if (!event) return;
             if (event.pointerType === 'mouse' && event.button !== 0) return;

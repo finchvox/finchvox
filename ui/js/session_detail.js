@@ -155,10 +155,6 @@ function sessionDetailApp() {
             }
         },
 
-        resetTracePanelWidth() {
-            this.setTracePanelWidth(DEFAULT_TRACE_PANEL_WIDTH_PX, { persist: true });
-        },
-
         startTracePanelResize(event) {
             if (!event) return;
             if (event.pointerType === 'mouse' && event.button !== 0) return;
