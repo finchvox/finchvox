@@ -79,47 +79,69 @@ function logsViewMixin() {
                 try {
                     localStorage.setItem(LOG_PANEL_WIDTH_STORAGE_KEY, String(Math.round(this.logPanelWidth)));
                 } catch {
-                    // Ignore storage failures (e.g. privacy mode / blocked storage)
                 }
             }
         },
 
-        startLogPanelResize(event) {
-            if (!event) return;
-            if (event.pointerType === 'mouse' && event.button !== 0) return;
-            if (this._logPanelResizeCleanup) return;
-
-            this.logPanelIsResizing = true;
-
-            const prevUserSelect = document.body.style.userSelect;
-            const prevCursor = document.body.style.cursor;
-            this._logPanelPrevBodyStyle = { userSelect: prevUserSelect, cursor: prevCursor };
+        _saveBodyStyleForLogResize() {
+            this._logPanelPrevBodyStyle = {
+                userSelect: document.body.style.userSelect,
+                cursor: document.body.style.cursor
+            };
             document.body.style.userSelect = 'none';
             document.body.style.cursor = 'col-resize';
+        },
+
+        _restoreBodyStyleAfterLogResize() {
+            if (this._logPanelPrevBodyStyle) {
+                document.body.style.userSelect = this._logPanelPrevBodyStyle.userSelect ?? '';
+                document.body.style.cursor = this._logPanelPrevBodyStyle.cursor ?? '';
+            }
+            this._logPanelPrevBodyStyle = null;
+        },
+
+        _finishLogPanelResize() {
+            if (!this.logPanelIsResizing) return;
+            this.logPanelIsResizing = false;
+            this.setLogPanelWidth(this.logPanelWidth, { persist: true });
+            this._restoreBodyStyleAfterLogResize();
+            if (this._logPanelResizeCleanup) {
+                this._logPanelResizeCleanup();
+                this._logPanelResizeCleanup = null;
+            }
+        },
+
+        _shouldIgnoreLogResizeEvent(event) {
+            if (!event) return true;
+            if (event.pointerType === 'mouse' && event.button !== 0) return true;
+            if (this._logPanelResizeCleanup) return true;
+            return false;
+        },
+
+        _getLogViewportWidth() {
+            return document.documentElement?.clientWidth || window.innerWidth || 0;
+        },
+
+        _trySetLogPointerCapture(event) {
+            try {
+                event.target?.setPointerCapture?.(event.pointerId);
+            } catch {
+            }
+        },
+
+        startLogPanelResize(event) {
+            if (this._shouldIgnoreLogResizeEvent(event)) return;
+
+            this.logPanelIsResizing = true;
+            this._saveBodyStyleForLogResize();
 
             const updateFromPointer = (clientX) => {
-                const viewportWidth = document.documentElement?.clientWidth || window.innerWidth || 0;
-                const desiredWidth = viewportWidth - clientX;
+                const desiredWidth = this._getLogViewportWidth() - clientX;
                 this.setLogPanelWidth(desiredWidth, { persist: false });
             };
 
             const onMove = (e) => updateFromPointer(e.clientX);
-            const finish = () => {
-                if (!this.logPanelIsResizing) return;
-                this.logPanelIsResizing = false;
-                this.setLogPanelWidth(this.logPanelWidth, { persist: true });
-
-                if (this._logPanelPrevBodyStyle) {
-                    document.body.style.userSelect = this._logPanelPrevBodyStyle.userSelect ?? '';
-                    document.body.style.cursor = this._logPanelPrevBodyStyle.cursor ?? '';
-                }
-                this._logPanelPrevBodyStyle = null;
-
-                if (this._logPanelResizeCleanup) {
-                    this._logPanelResizeCleanup();
-                    this._logPanelResizeCleanup = null;
-                }
-            };
+            const finish = () => this._finishLogPanelResize();
 
             document.addEventListener('pointermove', onMove);
             document.addEventListener('pointerup', finish, { once: true });
@@ -129,12 +151,7 @@ function logsViewMixin() {
                 document.removeEventListener('pointermove', onMove);
             };
 
-            try {
-                event.target?.setPointerCapture?.(event.pointerId);
-            } catch {
-                // Ignore - not all targets support pointer capture
-            }
-
+            this._trySetLogPointerCapture(event);
             updateFromPointer(event.clientX);
         },
 
