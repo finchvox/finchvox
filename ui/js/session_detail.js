@@ -1037,25 +1037,14 @@ function sessionDetailApp() {
         formatBarDuration(span) {
             if (!span) return '';
 
-            let result = formatDuration(span.durationMs);
+            const icons = [
+                this.hasException(span) && getIcon('error', ICON_STYLES.small),
+                span.name === 'llm' && this.spanHasToolCalls(span) && getIcon('tool', ICON_STYLES.small),
+                span.name === 'turn' && this.wasInterrupted(span) && getIcon('interrupted', ICON_STYLES.small),
+                span.name === 'turn' && this.isSlowLatency(span) && getIcon('turtle', ICON_STYLES.small),
+            ].filter(Boolean);
 
-            if (this.hasException(span)) {
-                result += ` ${getIcon('error', ICON_STYLES.small)}`;
-            }
-
-            if (span.name === 'llm' && this.spanHasToolCalls(span)) {
-                result += ` ${getIcon('tool', ICON_STYLES.small)}`;
-            }
-
-            if (span.name === 'turn' && this.wasInterrupted(span)) {
-                result += ` ${getIcon('interrupted', ICON_STYLES.small)}`;
-            }
-
-            if (span.name === 'turn' && this.isSlowLatency(span)) {
-                result += ` ${getIcon('turtle', ICON_STYLES.small)}`;
-            }
-
-            return result;
+            return [formatDuration(span.durationMs), ...icons].join(' ');
         },
 
         // Get all tool calls from the input attribute

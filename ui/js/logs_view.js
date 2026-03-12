@@ -3,6 +3,7 @@ function logsViewMixin() {
     const DEFAULT_LOG_PANEL_WIDTH_PX = 400;
     const MIN_LOG_PANEL_WIDTH_PX = 320;
     const MAX_LOG_PANEL_WIDTH_PX = 900;
+    const VALID_HASH_VIEWS = ['trace', 'conversation', 'metrics'];
 
     return {
         logCopied: false,
@@ -30,7 +31,7 @@ function logsViewMixin() {
 
         initLogsView() {
             const hash = window.location.hash.slice(1);
-            if (hash === 'trace' || hash === 'conversation' || hash === 'metrics') {
+            if (VALID_HASH_VIEWS.includes(hash)) {
                 this.selectedView = hash;
             }
 
