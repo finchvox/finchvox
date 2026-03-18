@@ -11,6 +11,14 @@
         '\'': '\'',
         '"': '"'
     };
+    const IDENTIFIER_VALUES = {
+        None: null,
+        null: null,
+        True: true,
+        true: true,
+        False: false,
+        false: false
+    };
 
     function normalizeLogText(value) {
         return String(value ?? '').replace(/\r\n?/g, '\n');
@@ -84,6 +92,14 @@
         return /[A-Za-z0-9_]/.test(char);
     }
 
+    function isQuotedValueStart(char) {
+        return char === '\'' || char === '"';
+    }
+
+    function isNumericValueStart(char) {
+        return char === '-' || /\d/.test(char);
+    }
+
     function parseUnicodeEscape(state) {
         const hex = sliceParser(state, 4);
         if (!/^[0-9a-fA-F]{4}$/.test(hex)) {
@@ -144,42 +160,55 @@
         return Number(match[0]);
     }
 
-    function parseIdentifier(state, allowBareWord = false) {
-        const start = state.index;
-
+    function readIdentifierToken(state) {
         if (!isIdentifierStart(currentChar(state))) {
             throw new Error('Unexpected token');
         }
 
+        const start = state.index;
         advanceParser(state);
         while (state.index < state.input.length && isIdentifierPart(currentChar(state))) {
             advanceParser(state);
         }
 
-        const identifier = state.input.slice(start, state.index);
+        return state.input.slice(start, state.index);
+    }
 
-        if (identifier === 'None' || identifier === 'null') return null;
-        if (identifier === 'True' || identifier === 'true') return true;
-        if (identifier === 'False' || identifier === 'false') return false;
+    function parseKnownIdentifierValue(identifier) {
+        if (Object.prototype.hasOwnProperty.call(IDENTIFIER_VALUES, identifier)) {
+            return { matched: true, value: IDENTIFIER_VALUES[identifier] };
+        }
+        return { matched: false, value: identifier };
+    }
+
+    function parseIdentifier(state, allowBareWord = false) {
+        const identifier = readIdentifierToken(state);
+        const parsed = parseKnownIdentifierValue(identifier);
+        if (parsed.matched) return parsed.value;
         if (allowBareWord) return identifier;
-
         throw new Error(`Unsupported identifier: ${identifier}`);
     }
 
-    function parseLiteralValue(state) {
+    function getCurrentValueStart(state) {
         skipWhitespace(state);
-
         if (state.index >= state.input.length) {
             throw new Error('Unexpected end of input');
         }
+        return currentChar(state);
+    }
 
-        const char = currentChar(state);
+    function getPrefixedLiteralParser(char) {
+        if (isQuotedValueStart(char)) return parseQuotedString;
+        if (char === '[') return parseArrayLiteral;
+        if (char === '{') return parseObjectLiteral;
+        if (isNumericValueStart(char)) return parseNumberLiteral;
+        return null;
+    }
 
-        if (char === '\'' || char === '"') return parseQuotedString(state);
-        if (char === '[') return parseArrayLiteral(state);
-        if (char === '{') return parseObjectLiteral(state);
-        if (char === '-' || /\d/.test(char)) return parseNumberLiteral(state);
-
+    function parseLiteralValue(state) {
+        const char = getCurrentValueStart(state);
+        const parser = getPrefixedLiteralParser(char);
+        if (parser) return parser(state);
         return parseIdentifier(state);
     }
 
@@ -375,29 +404,44 @@
         return formatStructuredScalar(value);
     }
 
+    function formatParsedLiteralResult(parsedLiteral, depth) {
+        if (!parsedLiteral) return null;
+        if (typeof parsedLiteral.value === 'string') {
+            return formatLogBody(parsedLiteral.value, depth + 1);
+        }
+        return formatStructuredValue(parsedLiteral.value, depth + 1);
+    }
+
+    function formatStructuredSuffixResult(structuredSuffix, depth) {
+        if (!structuredSuffix) return null;
+
+        const formattedValue = formatStructuredValue(structuredSuffix.value, depth + 1);
+        if (!structuredSuffix.prefix) return formattedValue;
+        return `${structuredSuffix.prefix}\n${formattedValue}`;
+    }
+
+    function formatNormalizedTextBody(text, depth) {
+        if (!text) return '';
+
+        const parsedLiteralResult = formatParsedLiteralResult(
+            tryParseStructuredLiteral(text),
+            depth
+        );
+        if (parsedLiteralResult !== null) return parsedLiteralResult;
+
+        const structuredSuffixResult = formatStructuredSuffixResult(
+            findStructuredSuffix(text),
+            depth
+        );
+        if (structuredSuffixResult !== null) return structuredSuffixResult;
+
+        return decodeLikelyEscapes(text);
+    }
+
     function formatLogBody(value, depth = 0) {
         if (value === null || value === undefined) return '';
         if (isStructuredValue(value)) return formatStructuredValue(value, depth + 1);
-
-        const text = normalizeLogText(value);
-        if (!text) return '';
-
-        const parsedLiteral = tryParseStructuredLiteral(text);
-        if (parsedLiteral) {
-            if (typeof parsedLiteral.value === 'string') {
-                return formatLogBody(parsedLiteral.value, depth + 1);
-            }
-            return formatStructuredValue(parsedLiteral.value, depth + 1);
-        }
-
-        const structuredSuffix = findStructuredSuffix(text);
-        if (structuredSuffix) {
-            const formattedValue = formatStructuredValue(structuredSuffix.value, depth + 1);
-            if (!structuredSuffix.prefix) return formattedValue;
-            return `${structuredSuffix.prefix}\n${formattedValue}`;
-        }
-
-        return decodeLikelyEscapes(text);
+        return formatNormalizedTextBody(normalizeLogText(value), depth);
     }
 
     function getSearchText(log) {
