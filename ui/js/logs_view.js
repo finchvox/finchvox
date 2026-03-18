@@ -6,6 +6,7 @@ function logsViewMixin() {
     const VALID_HASH_VIEWS = ['trace', 'conversation', 'metrics'];
 
     return {
+        _formattedLogBodyCache: new WeakMap(),
         logCopied: false,
         selectedView: 'logs',
         logs: [],
@@ -207,6 +208,7 @@ function logsViewMixin() {
 
         async loadLogs() {
             this.logsLoading = true;
+            this._formattedLogBodyCache = new WeakMap();
 
             try {
                 const response = await fetch(`/api/sessions/${this.sessionId}/logs?limit=${this.logsLimit}`);
@@ -262,7 +264,7 @@ function logsViewMixin() {
                 }
 
                 if (this.logSearchQuery) {
-                    const body = this.getLogBody(log).toLowerCase();
+                    const body = this.getLogSearchText(log).toLowerCase();
                     if (!body.includes(this.logSearchQuery.toLowerCase())) {
                         return false;
                     }
@@ -312,15 +314,25 @@ function logsViewMixin() {
             return levelColors[level.toUpperCase()] || 'text-white/70';
         },
 
+        getLogSearchText(log) {
+            return logMessageFormatter.getSearchText(log);
+        },
+
+        getLogPreview(log) {
+            return logMessageFormatter.getPreviewText(log);
+        },
+
         getLogBody(log) {
             if (!log) return '';
-            if (log.body?.string_value) {
-                return log.body.string_value;
-            }
-            if (typeof log.body === 'string') {
-                return log.body;
-            }
-            return JSON.stringify(log.body) || '';
+
+            const cached = this._formattedLogBodyCache.get(log);
+            if (cached !== undefined) return cached;
+
+            const formattedBody = logMessageFormatter.formatLogBody(
+                logMessageFormatter.getLogBodyValue(log)
+            );
+            this._formattedLogBodyCache.set(log, formattedBody);
+            return formattedBody;
         },
 
         getRawLogJSON(log) {

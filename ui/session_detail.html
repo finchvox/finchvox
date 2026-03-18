@@ -281,7 +281,7 @@
                                 <td class="px-8 py-2 text-white/60 text-xs truncate font-mono" x-text="formatLogRelativeTime(log.time_unix_nano)"></td>
                                 <td class="px-4 py-2 text-xs whitespace-nowrap font-mono" :class="getLogLevelClass(log.severity_text)" x-text="log.severity_text"></td>
                                 <td class="px-4 py-2 text-white/70 text-xs truncate font-mono" x-text="log.instrumentation_scope?.name || ''"></td>
-                                <td class="px-4 py-2 text-white text-xs truncate font-mono" x-text="getLogBody(log)"></td>
+                                <td class="px-4 py-2 text-white text-xs truncate font-mono" x-text="getLogPreview(log)"></td>
                             </tr>
                         </template>
                     </tbody>
@@ -635,7 +635,7 @@
                 <!-- Message -->
                 <div class="mb-6">
                     <label class="text-white/40 font-semibold text-xs mb-2 block">Message</label>
-                    <div class="text-emerald-500 text-[13px] bg-[#050507] p-2 border border-white/10 whitespace-pre-wrap break-words font-mono" x-text="getLogBody(selectedLog)"></div>
+                    <pre class="bg-[#050507] p-2 overflow-x-auto overflow-y-auto font-mono text-[13px] leading-relaxed text-emerald-500 border border-white/10 whitespace-pre-wrap break-words max-h-[420px]" x-text="getLogBody(selectedLog)"></pre>
                 </div>
 
                 <!-- Raw JSON -->
@@ -659,6 +659,7 @@
     </div><!-- End page-layout -->
 
     <script src="/js/time-utils.js"></script>
+    <script src="/js/log_message_formatter.js"></script>
     <script src="/js/logs_view.js"></script>
     <script src="/js/conversation.js"></script>
     <script src="/js/metrics_view.js"></script>
