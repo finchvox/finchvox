@@ -250,40 +250,53 @@
         return parseIdentifier(state, true);
     }
 
+    function isEmptyObjectLiteral(state) {
+        return currentChar(state) === '}';
+    }
+
+    function consumeObjectKeySeparator(state) {
+        if (currentChar(state) !== ':') {
+            throw new Error('Expected ":"');
+        }
+        advanceParser(state);
+    }
+
+    function parseObjectEntry(state, result) {
+        const key = parseObjectKey(state);
+        skipWhitespace(state);
+        consumeObjectKeySeparator(state);
+        result[String(key)] = parseLiteralValue(state);
+        skipWhitespace(state);
+    }
+
+    function consumeObjectEntrySeparator(state) {
+        if (currentChar(state) === ',') {
+            advanceParser(state);
+            skipWhitespace(state);
+            return false;
+        }
+
+        if (currentChar(state) === '}') {
+            advanceParser(state);
+            return true;
+        }
+
+        throw new Error('Expected "," or "}"');
+    }
+
     function parseObjectLiteral(state) {
         const result = {};
         advanceParser(state);
         skipWhitespace(state);
 
-        if (currentChar(state) === '}') {
+        if (isEmptyObjectLiteral(state)) {
             advanceParser(state);
             return result;
         }
 
         while (state.index < state.input.length) {
-            const key = parseObjectKey(state);
-            skipWhitespace(state);
-
-            if (currentChar(state) !== ':') {
-                throw new Error('Expected ":"');
-            }
-
-            advanceParser(state);
-            result[String(key)] = parseLiteralValue(state);
-            skipWhitespace(state);
-
-            if (currentChar(state) === ',') {
-                advanceParser(state);
-                skipWhitespace(state);
-                continue;
-            }
-
-            if (currentChar(state) === '}') {
-                advanceParser(state);
-                return result;
-            }
-
-            throw new Error('Expected "," or "}"');
+            parseObjectEntry(state, result);
+            if (consumeObjectEntrySeparator(state)) return result;
         }
 
         throw new Error('Unterminated object literal');
