@@ -1,6 +1,6 @@
 [project]
 name = "finchvox"
-version = "0.0.15"
+version = "0.0.16"
 description = "Voice AI observability dev tool for Pipecat"
 readme = "README.md"
 license = "MIT"
