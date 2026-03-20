@@ -69,3 +69,11 @@ Enter your PyPI API token when prompted.
 ### 3. Verify Upload
 
 Visit: https://pypi.org/project/finchvox/
+
+## Create GitHub Release
+
+```bash
+gh release create v0.0.2 --title "v0.0.2" --notes "Release notes here"
+```
+
+Visit: https://github.com/finchvox/finchvox/releases
