@@ -2,7 +2,7 @@
 name = "pipecat-finchvox-chaos"
 version = "0.0.1"
 description = "A Pipecat example with chaos/failure injection for testing"
-requires-python = ">=3.10,<3.14"
+requires-python = ">=3.11,<3.14"
 dependencies = [
     "pipecat-ai[daily,webrtc,websocket,silero,cartesia,deepgram,openai,tracing,runner]",
     "finchvox",

@@ -21,7 +21,7 @@ _👇 Click the image for a short video:_
 
 ## Prerequisites
 
-- Python 3.10 or higher
+- Python 3.11 or higher
 - Pipecat 0.0.68 or higher
 
 ## Installation

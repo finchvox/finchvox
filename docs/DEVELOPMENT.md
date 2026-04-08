@@ -76,6 +76,6 @@ uv pip install --system -e ".[dev]"
 # Run tests with verbose output
 pytest tests/ -v
 
-# Check Python version (requires 3.10+)
+# Check Python version (requires 3.11+)
 python --version
 ```
