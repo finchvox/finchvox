@@ -1,3 +1,10 @@
 - Use `uv` to manage the environment + dependencies and not `pip`.
 - Minimize code in src/finchvox/ui_routes.py. Abstract functionality to Python classes like src/finchvox/session.py.
-- When planning, ensure tests are written for each feature.
+- When planning:
+  - use a red/green testing strategy as part of the implementation.
+  - create a git branch in the plan if on the `main` branch.
+- You should search through pipecat reference material to confirm internals of pipecat:
+  - You can search through a local copy of the pipecat docs: /Users/derek/projects/refs/pipecat-docs
+  - You can search through the pipecat source: /Users/derek/projects/pipecat
+- If you need to inspect session data, it is stored in ~/.finchvox/sessions/[SESSION_ID].
+  - Do not commit, push, or create a PR unless specifically instructed to do so.
