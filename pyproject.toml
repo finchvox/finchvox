@@ -4,7 +4,7 @@ version = "0.0.16"
 description = "Voice AI observability dev tool for Pipecat"
 readme = "README.md"
 license = "MIT"
-requires-python = ">=3.10"
+requires-python = ">=3.11"
 dependencies = [
     "grpcio>=1.60.0",
     "opentelemetry-proto>=1.27.0",
