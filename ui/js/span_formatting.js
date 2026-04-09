@@ -141,6 +141,19 @@ function spanFormattingMixin() {
             return formatDuration(ttfbSeconds * 1000);
         },
 
+        getTextAggregation(span) {
+            if (!span || !span.attributes) return null;
+            const attr = span.attributes.find(a => a.key === 'turn.text_aggregation_seconds');
+            if (!attr || !attr.value.double_value) return null;
+            return attr.value.double_value;
+        },
+
+        formatTextAggregation(span) {
+            const seconds = this.getTextAggregation(span);
+            if (seconds === null) return '';
+            return formatDuration(seconds * 1000);
+        },
+
         getUserBotLatency(span) {
             if (!span || !span.attributes) return null;
             const latencyAttr = span.attributes.find(a => a.key === 'turn.user_bot_latency_seconds');
