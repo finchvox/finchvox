@@ -4,6 +4,7 @@
 # SPDX-License-Identifier: BSD 2-Clause License
 #
 
+import asyncio
 import os
 
 from dotenv import load_dotenv
@@ -37,6 +38,8 @@ load_dotenv(override=True)
 
 finchvox.init(service_name="pipecat-demo")
 
+SIMULATED_DB_LATENCY = 0.2
+
 
 async def add_item_to_order(params: FunctionCallParams):
     item = params.arguments.get("item", "item")
@@ -45,15 +48,18 @@ async def add_item_to_order(params: FunctionCallParams):
     description = f"{size} {item}".strip()
     if modifications:
         description += f" with {', '.join(modifications)}"
+    await asyncio.sleep(SIMULATED_DB_LATENCY)
     await params.result_callback({"success": True, "item": description})
 
 
 async def remove_item_from_order(params: FunctionCallParams):
     item = params.arguments.get("item", "item")
+    await asyncio.sleep(SIMULATED_DB_LATENCY)
     await params.result_callback({"success": True, "removed": item})
 
 
 async def get_order_summary(params: FunctionCallParams):
+    await asyncio.sleep(SIMULATED_DB_LATENCY)
     await params.result_callback(
         {"items": ["medium oat latte", "blueberry muffin"], "item_count": 2}
     )
@@ -61,6 +67,7 @@ async def get_order_summary(params: FunctionCallParams):
 
 async def submit_order(params: FunctionCallParams):
     name = params.arguments.get("customer_name", "friend")
+    await asyncio.sleep(SIMULATED_DB_LATENCY)
     await params.result_callback({"success": True, "order_number": 47, "name": name})
 
 
