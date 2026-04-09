@@ -22,6 +22,7 @@
     --span-llm: #ec4899;
     --span-tts: #a855f7;
     --span-turn: #10b981;
+    --span-function_call: #06b6d4;
     --span-default: #6b7280;
 
     --waterfall-row-height: 32px;
@@ -74,6 +75,7 @@ button:focus-visible {
 .bar-tts { background: var(--span-tts); }
 .bar-turn { background: var(--span-turn); }
 .bar-conversation { background: #3f3f46; }
+.bar-function_call { background: var(--span-function_call); }
 
 .selected .timeline-bar,
 .timeline-bar.selected {

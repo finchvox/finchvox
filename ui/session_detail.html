@@ -14,6 +14,7 @@
                         'span-llm': '#ec4899',
                         'span-tts': '#a855f7',
                         'span-turn': '#10b981',
+                        'span-function_call': '#06b6d4',
                     }
                 }
             }
@@ -484,6 +485,10 @@
             </div>
             <div class="p-8">
                 <div class="grid gap-4 mb-8">
+                    <div class="grid grid-cols-[150px_1fr] gap-4" x-show="selectedSpan?.name === 'function_call' && hasAttribute(selectedSpan, 'tool.function_name')">
+                        <label class="text-white/40 font-semibold text-xs">Function</label>
+                        <span class="text-white text-xs font-mono" x-text="getAttribute(selectedSpan, 'tool.function_name')"></span>
+                    </div>
                     <div class="grid grid-cols-[150px_1fr] gap-4">
                         <label class="text-white/40 font-semibold text-xs">Duration:</label>
                         <span class="text-white text-xs" x-text="formatSpanDuration(selectedSpan)"></span>
