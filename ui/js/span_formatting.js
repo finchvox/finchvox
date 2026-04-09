@@ -154,6 +154,19 @@ function spanFormattingMixin() {
             return formatDuration(seconds * 1000);
         },
 
+        getUserTurnSeconds(span) {
+            if (!span || !span.attributes) return null;
+            const attr = span.attributes.find(a => a.key === 'turn.user_turn_seconds');
+            if (!attr || !attr.value.double_value) return null;
+            return attr.value.double_value;
+        },
+
+        formatUserTurnSeconds(span) {
+            const seconds = this.getUserTurnSeconds(span);
+            if (seconds === null) return '';
+            return formatDuration(seconds * 1000);
+        },
+
         getUserBotLatency(span) {
             if (!span || !span.attributes) return null;
             const latencyAttr = span.attributes.find(a => a.key === 'turn.user_bot_latency_seconds');

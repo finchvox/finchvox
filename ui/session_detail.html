@@ -496,6 +496,10 @@
                         <label class="text-white/40 font-semibold text-xs" title="Time from first LLM token to first complete sentence">Text Aggregation</label>
                         <span class="text-white text-xs" x-text="formatTextAggregation(selectedSpan)"></span>
                     </div>
+                    <div class="grid grid-cols-[150px_1fr] gap-4" x-show="getUserTurnSeconds(selectedSpan) !== null">
+                        <label class="text-white/40 font-semibold text-xs" title="Duration from user silence to turn release (VAD, STT, turn analyzer)">User Turn</label>
+                        <span class="text-white text-xs" x-text="formatUserTurnSeconds(selectedSpan)"></span>
+                    </div>
                     <div class="grid grid-cols-[150px_1fr] gap-4" x-show="getUserBotLatency(selectedSpan) !== null">
                         <label class="text-white/40 font-semibold text-xs">User ↔ Bot Latency</label>
                         <span class="text-white text-xs" x-html="formatUserBotLatency(selectedSpan)"></span>
