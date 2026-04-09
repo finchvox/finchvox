@@ -83,28 +83,7 @@ transport_params = {
 }
 
 
-async def run_bot(transport: BaseTransport):
-    stt = DeepgramSTTService(api_key=os.getenv("DEEPGRAM_API_KEY"))
-
-    tts = CartesiaTTSService(
-        api_key=os.getenv("CARTESIA_API_KEY"),
-        voice_id="f786b574-daa5-4673-aa0c-cbe3e8534c02",
-    )
-
-    llm = OpenAILLMService(
-        api_key=os.getenv("OPENAI_API_KEY"),
-        params=OpenAILLMService.InputParams(temperature=0.5),
-    )
-
-    llm.register_function("add_item_to_order", add_item_to_order)
-    llm.register_function("remove_item_from_order", remove_item_from_order)
-    llm.register_function("get_order_summary", get_order_summary)
-    llm.register_function("submit_order", submit_order)
-
-    @llm.event_handler("on_function_calls_started")
-    async def on_function_calls_started(service, function_calls):
-        await tts.queue_frame(TTSSpeakFrame("One sec."))
-
+def _build_tools_schema() -> ToolsSchema:
     add_item_schema = FunctionSchema(
         name="add_item_to_order",
         description="Add an item to the customer's order",
@@ -158,7 +137,7 @@ async def run_bot(transport: BaseTransport):
         required=["customer_name"],
     )
 
-    tools = ToolsSchema(
+    return ToolsSchema(
         standard_tools=[
             add_item_schema,
             remove_item_schema,
@@ -167,7 +146,9 @@ async def run_bot(transport: BaseTransport):
         ]
     )
 
-    messages = [
+
+def _build_system_messages() -> list[dict]:
+    return [
         {
             "role": "system",
             "content": """You are Sam, a friendly barista at a cozy neighborhood coffee shop. You're warm and welcoming but efficient - you keep conversations moving without being rushed.
@@ -189,6 +170,41 @@ Behavior:
 Your output will be converted to audio so don't include special characters. Be conversational and brief.""",
         },
     ]
+
+
+def _create_services():
+    stt = DeepgramSTTService(api_key=os.getenv("DEEPGRAM_API_KEY"))
+
+    tts = CartesiaTTSService(
+        api_key=os.getenv("CARTESIA_API_KEY"),
+        voice_id="f786b574-daa5-4673-aa0c-cbe3e8534c02",
+    )
+
+    llm = OpenAILLMService(
+        api_key=os.getenv("OPENAI_API_KEY"),
+        params=OpenAILLMService.InputParams(temperature=0.5),
+    )
+
+    return stt, tts, llm
+
+
+def _register_llm_tools(llm, tts):
+    llm.register_function("add_item_to_order", add_item_to_order)
+    llm.register_function("remove_item_from_order", remove_item_from_order)
+    llm.register_function("get_order_summary", get_order_summary)
+    llm.register_function("submit_order", submit_order)
+
+    @llm.event_handler("on_function_calls_started")
+    async def on_function_calls_started(service, function_calls):
+        await tts.queue_frame(TTSSpeakFrame("One sec."))
+
+
+async def run_bot(transport: BaseTransport):
+    stt, tts, llm = _create_services()
+    _register_llm_tools(llm, tts)
+
+    tools = _build_tools_schema()
+    messages = _build_system_messages()
 
     context = LLMContext(messages, tools)
     context_aggregator = LLMContextAggregatorPair(
