@@ -4,6 +4,8 @@ import sys
 import time
 import uuid
 
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+
 import aiohttp
 from dotenv import load_dotenv
 from loguru import logger
