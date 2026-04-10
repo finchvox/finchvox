@@ -105,18 +105,39 @@ Your output will be converted to audio so don't include special characters. Be c
 ]
 
 
-async def run_barista(room_url: str, token: str, done_event: asyncio.Event):
-    transport = DailyTransport(
-        room_url,
-        token,
-        "Barista",
-        DailyParams(
-            audio_in_enabled=True,
-            audio_out_enabled=True,
-            vad_analyzer=SileroVADAnalyzer(),
-        ),
+async def _handle_add_item(params: FunctionCallParams):
+    item = params.arguments.get("item", "item")
+    size = params.arguments.get("size", "")
+    modifications = params.arguments.get("modifications", [])
+    description = f"{size} {item}".strip()
+    if modifications:
+        description += f" with {', '.join(modifications)}"
+    await asyncio.sleep(SIMULATED_DB_LATENCY)
+    await params.result_callback({"success": True, "item": description})
+
+
+async def _handle_remove_item(params: FunctionCallParams):
+    item = params.arguments.get("item", "item")
+    await asyncio.sleep(SIMULATED_DB_LATENCY)
+    await params.result_callback({"success": True, "removed": item})
+
+
+async def _handle_get_order_summary(params: FunctionCallParams):
+    await asyncio.sleep(SIMULATED_DB_LATENCY)
+    await params.result_callback(
+        {"items": ["medium oat latte", "blueberry muffin"], "item_count": 2}
     )
 
+
+async def _handle_submit_order(params: FunctionCallParams, done_event: asyncio.Event):
+    name = params.arguments.get("customer_name", "friend")
+    await asyncio.sleep(SIMULATED_DB_LATENCY)
+    await params.result_callback({"success": True, "order_number": 47, "name": name})
+    logger.info(f"Order submitted for {name}")
+    done_event.set()
+
+
+def _create_services():
     stt = DeepgramSTTService(api_key=os.getenv("DEEPGRAM_API_KEY"))
     tts = CartesiaTTSService(
         api_key=os.getenv("CARTESIA_API_KEY"),
@@ -126,46 +147,23 @@ async def run_barista(room_url: str, token: str, done_event: asyncio.Event):
         api_key=os.getenv("OPENAI_API_KEY"),
         params=OpenAILLMService.InputParams(temperature=0.5),
     )
+    return stt, tts, llm
 
-    async def add_item_to_order(params: FunctionCallParams):
-        item = params.arguments.get("item", "item")
-        size = params.arguments.get("size", "")
-        modifications = params.arguments.get("modifications", [])
-        description = f"{size} {item}".strip()
-        if modifications:
-            description += f" with {', '.join(modifications)}"
-        await asyncio.sleep(SIMULATED_DB_LATENCY)
-        await params.result_callback({"success": True, "item": description})
 
-    async def remove_item_from_order(params: FunctionCallParams):
-        item = params.arguments.get("item", "item")
-        await asyncio.sleep(SIMULATED_DB_LATENCY)
-        await params.result_callback({"success": True, "removed": item})
-
-    async def get_order_summary(params: FunctionCallParams):
-        await asyncio.sleep(SIMULATED_DB_LATENCY)
-        await params.result_callback(
-            {"items": ["medium oat latte", "blueberry muffin"], "item_count": 2}
-        )
-
-    async def submit_order(params: FunctionCallParams):
-        name = params.arguments.get("customer_name", "friend")
-        await asyncio.sleep(SIMULATED_DB_LATENCY)
-        await params.result_callback(
-            {"success": True, "order_number": 47, "name": name}
-        )
-        logger.info(f"Order submitted for {name}")
-        done_event.set()
-
-    llm.register_function("add_item_to_order", add_item_to_order)
-    llm.register_function("remove_item_from_order", remove_item_from_order)
-    llm.register_function("get_order_summary", get_order_summary)
-    llm.register_function("submit_order", submit_order)
+def _register_functions(llm, tts, done_event):
+    llm.register_function("add_item_to_order", _handle_add_item)
+    llm.register_function("remove_item_from_order", _handle_remove_item)
+    llm.register_function("get_order_summary", _handle_get_order_summary)
+    llm.register_function(
+        "submit_order", lambda params: _handle_submit_order(params, done_event)
+    )
 
     @llm.event_handler("on_function_calls_started")
     async def on_function_calls_started(service, function_calls):
         await tts.queue_frame(TTSSpeakFrame("One sec."))
 
+
+def _build_pipeline(transport, stt, tts, llm):
     context = LLMContext(SYSTEM_MESSAGES, _build_tools_schema())
     context_aggregator = LLMContextAggregatorPair(
         context,
@@ -185,7 +183,7 @@ async def run_barista(room_url: str, token: str, done_event: asyncio.Event):
         ]
     )
 
-    task = PipelineTask(
+    return PipelineTask(
         pipeline,
         params=PipelineParams(
             enable_metrics=True,
@@ -194,6 +192,23 @@ async def run_barista(room_url: str, token: str, done_event: asyncio.Event):
         enable_tracing=True,
         enable_turn_tracking=True,
     )
+
+
+async def run_barista(room_url: str, token: str, done_event: asyncio.Event):
+    transport = DailyTransport(
+        room_url,
+        token,
+        "Barista",
+        DailyParams(
+            audio_in_enabled=True,
+            audio_out_enabled=True,
+            vad_analyzer=SileroVADAnalyzer(),
+        ),
+    )
+
+    stt, tts, llm = _create_services()
+    _register_functions(llm, tts, done_event)
+    task = _build_pipeline(transport, stt, tts, llm)
 
     @transport.event_handler("on_first_participant_joined")
     async def on_first_participant_joined(transport, participant):
