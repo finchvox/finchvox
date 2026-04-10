@@ -1,0 +1,15 @@
+[project]
+name = "pipecat-finchvox-e2e"
+version = "0.0.1"
+description = "E2E test: two bots converse in a Daily room to exercise OTEL instrumentation"
+requires-python = ">=3.11,<3.14"
+dependencies = [
+    "pipecat-ai[daily,silero,cartesia,deepgram,openai,tracing]",
+    "finchvox",
+    "python-dotenv",
+    "aiohttp",
+]
+
+[tool.uv.sources]
+finchvox = { path = "../../..", editable = true }
+pipecat-ai = { path = "/Users/derek/projects/pipecat", editable = true }
