@@ -91,11 +91,12 @@ transport_params = {
 
 
 async def run_bot(transport: BaseTransport):
-    stt, tts, llm = shared.create_services(
+    services = shared.create_services(
         stt_cls=ChaosDeepgramSTTService,
         tts_cls=ChaosCartesiaTTSService,
         llm_cls=ChaosOpenAILLMService,
     )
+    stt, tts, llm = services
 
     llm.register_function("add_item_to_order", with_chaos(shared.add_item_to_order))
     llm.register_function(
@@ -105,8 +106,7 @@ async def run_bot(transport: BaseTransport):
     llm.register_function("submit_order", with_chaos(shared.submit_order))
     shared.register_function_calls_started_handler(llm, tts)
 
-    context_aggregator = shared.build_context_aggregator()
-    task = shared.build_pipeline(transport, stt, tts, llm, context_aggregator)
+    task = shared.build_pipeline(transport, services)
 
     @transport.event_handler("on_client_connected")
     async def on_client_connected(transport, client):

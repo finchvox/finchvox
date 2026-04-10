@@ -54,7 +54,8 @@ async def run_barista(room_url: str, token: str, done_event: asyncio.Event):
         ),
     )
 
-    stt, tts, llm = shared.create_services()
+    services = shared.create_services()
+    stt, tts, llm = services
 
     llm.register_function("add_item_to_order", add_item_to_order)
     llm.register_function("remove_item_from_order", remove_item_from_order)
@@ -64,10 +65,11 @@ async def run_barista(room_url: str, token: str, done_event: asyncio.Event):
     )
     shared.register_function_calls_started_handler(llm, tts)
 
-    context_aggregator = shared.build_context_aggregator(
+    task = shared.build_pipeline(
+        transport,
+        services,
         user_params=LLMUserAggregatorParams(vad_analyzer=SileroVADAnalyzer()),
     )
-    task = shared.build_pipeline(transport, stt, tts, llm, context_aggregator)
 
     @transport.event_handler("on_first_participant_joined")
     async def on_first_participant_joined(transport, participant):

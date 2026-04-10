@@ -145,12 +145,11 @@ def register_function_calls_started_handler(llm, tts):
         await tts.queue_frame(TTSSpeakFrame("One sec."))
 
 
-def build_context_aggregator(user_params=None):
+def build_pipeline(transport, services, user_params=None):
+    stt, tts, llm = services
     context = LLMContext(SYSTEM_MESSAGES, TOOLS_SCHEMA)
-    return LLMContextAggregatorPair(context, user_params=user_params)
+    context_aggregator = LLMContextAggregatorPair(context, user_params=user_params)
 
-
-def build_pipeline(transport, stt, tts, llm, context_aggregator):
     pipeline = Pipeline(
         [
             transport.input(),

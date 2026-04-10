@@ -69,7 +69,8 @@ transport_params = {
 
 
 async def run_bot(transport: BaseTransport):
-    stt, tts, llm = shared.create_services()
+    services = shared.create_services()
+    stt, tts, llm = services
 
     llm.register_function("add_item_to_order", add_item_to_order)
     llm.register_function("remove_item_from_order", remove_item_from_order)
@@ -77,10 +78,11 @@ async def run_bot(transport: BaseTransport):
     llm.register_function("submit_order", submit_order)
     shared.register_function_calls_started_handler(llm, tts)
 
-    context_aggregator = shared.build_context_aggregator(
+    task = shared.build_pipeline(
+        transport,
+        services,
         user_params=LLMUserAggregatorParams(vad_analyzer=SileroVADAnalyzer()),
     )
-    task = shared.build_pipeline(transport, stt, tts, llm, context_aggregator)
 
     @transport.event_handler("on_client_connected")
     async def on_client_connected(transport, client):
