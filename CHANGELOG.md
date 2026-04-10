@@ -5,6 +5,19 @@ All notable changes to **Finchvox** will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.0.17] - 2026-4-10
+
+- Add function call span styling and detail panel support in trace UI.
+- Display user turn duration (`user_turn_seconds`) on turn spans in trace UI.
+- Add text aggregation display and fix missing user-bot latency.
+- Bump minimum Python version from 3.10 to 3.11.
+- Add e2e bot conversation example for OTEL instrumentation.
+
+## [0.0.16] - 2026-3-25
+
+- Simplify object literal parsing in log message formatter.
+- Beautify inspect log message rendering.
+
 ## [0.0.15] - 2026-3-12
 
 - Add pagination to sessions list.
