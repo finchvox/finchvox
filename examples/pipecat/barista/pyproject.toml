@@ -1,11 +1,13 @@
 [project]
-name = "pipecat-finchvox-tracing"
+name = "pipecat-finchvox-barista-examples"
 version = "0.0.1"
-description = "A Pipecat example using Finchvox OTEL tracing"
+description = "Pipecat barista bot examples with Finchvox OTEL tracing"
 requires-python = ">=3.11,<3.14"
 dependencies = [
     "pipecat-ai[daily,webrtc,websocket,silero,cartesia,deepgram,openai,tracing,runner]",
     "finchvox",
+    "python-dotenv",
+    "aiohttp",
 ]
 
 [tool.uv.sources]
