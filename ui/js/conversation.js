@@ -3,6 +3,8 @@ function conversationViewMixin() {
         conversationTurns: [],
         conversationLoading: false,
         conversationError: null,
+        timelineItems: [],
+        timelineHeight: 0,
 
         async fetchConversation() {
             this.conversationLoading = true;
@@ -13,39 +15,127 @@ function conversationViewMixin() {
                 if (!response.ok) throw new Error(`HTTP ${response.status}`);
 
                 const data = await response.json();
-                const turns = data.turns;
-                for (let i = 0; i < turns.length - 1; i++) {
-                    const postUserEvents = this.getPostInterruptionUserEvents(turns[i].events);
-                    if (postUserEvents.length) {
-                        turns[i + 1].carriedUserEvents = postUserEvents;
-                    }
-                    const postBotEvents = this.getPostInterruptionBotEvents(turns[i].events)
-                        .filter(e => e.name === 'bot_started_speaking');
-                    if (postBotEvents.length) {
-                        turns[i + 1].carriedBotEvents = postBotEvents;
-                    }
-
-                    const nextBotEvents = this.getBotEvents(turns[i + 1].events || []);
-                    const earlyStops = [];
-                    for (const e of nextBotEvents) {
-                        if (e.name === 'bot_stopped_speaking') {
-                            earlyStops.push(e);
-                        } else {
-                            break;
-                        }
-                    }
-                    if (earlyStops.length) {
-                        turns[i].trailingBotEvents = earlyStops;
-                        turns[i + 1].excludedEarlyStops = new Set(earlyStops.map(e => e.time_unix_nano));
-                    }
-                }
-                this.conversationTurns = turns;
+                this.conversationTurns = data.turns;
+                this.buildTimeline();
             } catch (error) {
                 console.error('Failed to load conversation:', error);
                 this.conversationError = error.message;
             } finally {
                 this.conversationLoading = false;
             }
+        },
+
+        buildTimeline() {
+            const items = [];
+
+            for (const turn of this.conversationTurns) {
+                for (const msg of (turn.messages || [])) {
+                    items.push({
+                        type: 'message',
+                        side: msg.role === 'user' ? 'left' : 'right',
+                        data: msg,
+                        startNs: Number(msg.timestamp),
+                        endNs: Number(msg.end_timestamp || msg.timestamp),
+                    });
+                }
+
+                for (const fc of (turn.function_calls || [])) {
+                    items.push({
+                        type: 'function_call',
+                        side: 'right',
+                        data: fc,
+                        startNs: Number(fc.start_time_unix_nano),
+                        endNs: Number(fc.end_time_unix_nano),
+                    });
+                }
+
+                for (const evt of (turn.events || [])) {
+                    const side = this.isUserEvent(evt) ? 'left' : 'right';
+                    items.push({
+                        type: 'event',
+                        side,
+                        data: evt,
+                        startNs: Number(evt.time_unix_nano),
+                        endNs: Number(evt.time_unix_nano),
+                    });
+                }
+
+                // TODO: position latency blocks in the timeline
+                // For now, latency is omitted to avoid overlap issues
+            }
+
+            items.sort((a, b) => a.startNs - b.startNs);
+
+            if (items.length === 0) {
+                this.timelineItems = [];
+                this.timelineHeight = 0;
+                return;
+            }
+
+            const originNs = items[0].startNs;
+            const BASE_HEIGHT = 100;
+            const REF_SEC = 0.3;
+            const MIN_BUBBLE_HEIGHT = 60;
+            const MIN_EVENT_HEIGHT = 22;
+            const ITEM_GAP = 4;
+
+            const nsToY = (ns) => {
+                const deltaSec = (ns - originNs) / 1_000_000_000;
+                if (deltaSec <= 0) return 0;
+                return BASE_HEIGHT * Math.log2(1 + deltaSec / REF_SEC);
+            };
+
+            const LABEL_HEIGHT = 24;
+            const PADDING = 16;
+
+            for (const item of items) {
+                item.rawY = nsToY(item.startNs);
+                const endY = nsToY(item.endNs);
+                const durationHeight = endY - item.rawY;
+
+                if (item.type === 'message') {
+                    const textLen = item.data.content ? item.data.content.length : 0;
+                    const estimatedTextHeight = Math.ceil(textLen / 30) * 20 + 24;
+                    item.height = Math.max(durationHeight, MIN_BUBBLE_HEIGHT, estimatedTextHeight) + LABEL_HEIGHT + PADDING;
+                } else if (item.type === 'function_call') {
+                    let attrLines = 2;
+                    if (item.data.attributes) {
+                        for (const [k, v] of Object.entries(item.data.attributes)) {
+                            const lineLen = k.length + String(v).length + 2;
+                            attrLines += Math.ceil(lineLen / 25);
+                        }
+                    }
+                    const estimatedHeight = attrLines * 18 + 24;
+                    item.height = Math.max(durationHeight, estimatedHeight) + LABEL_HEIGHT + PADDING;
+                } else {
+                    item.height = MIN_EVENT_HEIGHT;
+                }
+            }
+
+            const leftTrack = [];
+            const rightTrack = [];
+            let maxY = 0;
+
+            for (const item of items) {
+                const track = item.side === 'left' ? leftTrack : rightTrack;
+                let y = item.rawY;
+
+                for (const prev of track) {
+                    const prevBottom = prev.y + prev.height + ITEM_GAP;
+                    if (y < prevBottom) {
+                        y = prevBottom;
+                    }
+                }
+
+                item.y = y;
+                track.push(item);
+
+                const itemBottom = item.y + item.height;
+                if (itemBottom > maxY) maxY = itemBottom;
+            }
+
+            this.timelineItems = items;
+            this.timelineHeight = maxY + 40;
         },
 
         formatEventTime(timeUnixNano) {
@@ -81,157 +171,6 @@ function conversationViewMixin() {
             }
         },
 
-        formatLatencyRow(latency) {
-            if (!latency) return '';
-            const order = [
-                ['turn.user_turn_seconds', 'user_turn_seconds'],
-                ['stt metrics.ttfb', 'stt_ttfb'],
-                ['llm metrics.ttfb', 'llm_ttfb'],
-                ['function_call_seconds', 'function_call_seconds'],
-                ['turn.text_aggregation_seconds', 'text_aggregation_seconds'],
-                ['tts metrics.ttfb', 'tts_ttfb'],
-                ['turn.user_bot_latency_seconds', 'user_bot_latency_seconds'],
-            ];
-            const parts = [];
-            for (const [label, key] of order) {
-                if (latency[key] != null) {
-                    const ms = (latency[key] * 1000).toFixed(0);
-                    parts.push(`${label}: ${ms}ms`);
-                }
-            }
-            return parts.join(' | ');
-        },
-
-        formatTurnLatencyMs(seconds) {
-            if (seconds == null) return '';
-            const ms = (seconds * 1000).toFixed(0);
-            return `${ms}ms`;
-        },
-
-        getPostAgentBotEvents(turn) {
-            const postInterruption = this.getPostInterruptionBotEvents(turn.events || []);
-            const trailing = turn.trailingBotEvents || [];
-            return [...postInterruption, ...trailing]
-                .sort((a, b) => Number(a.time_unix_nano) - Number(b.time_unix_nano));
-        },
-
-        getEventsWithGaps(events) {
-            if (!events || !events.length) return [];
-            const result = [];
-            for (let i = 0; i < events.length; i++) {
-                result.push({ type: 'event', data: events[i] });
-                if (i < events.length - 1) {
-                    const currNs = Number(events[i].time_unix_nano);
-                    const nextNs = Number(events[i + 1].time_unix_nano);
-                    const gapSeconds = (nextNs - currNs) / 1_000_000_000;
-                    if (gapSeconds >= 1.0) {
-                        result.push({ type: 'gap', duration: gapSeconds });
-                    }
-                }
-            }
-            return result;
-        },
-
-        formatGapDuration(seconds) {
-            if (seconds < 60) return seconds.toFixed(1) + 's';
-            return (seconds / 60).toFixed(1) + 'm';
-        },
-
-        getChronologicalItems(turn) {
-            const items = [];
-
-            for (const msg of (turn.messages || [])) {
-                items.push({
-                    type: 'message',
-                    data: msg,
-                    timestamp: Number(msg.timestamp),
-                });
-            }
-
-            for (const fc of (turn.function_calls || [])) {
-                items.push({
-                    type: 'function_call',
-                    data: fc,
-                    timestamp: Number(fc.start_time_unix_nano),
-                });
-            }
-
-            items.sort((a, b) => a.timestamp - b.timestamp);
-
-            if (turn.latency) {
-                let insertIndex = 0;
-                for (let i = 0; i < items.length; i++) {
-                    if (items[i].type === 'message' && items[i].data.role === 'user') {
-                        insertIndex = i + 1;
-                    } else {
-                        break;
-                    }
-                }
-                items.splice(insertIndex, 0, {
-                    type: 'latency',
-                    data: turn.latency,
-                    timestamp: 0,
-                });
-            }
-
-            let lastUserIdx = -1;
-            let lastAssistantIdx = -1;
-            for (let i = 0; i < items.length; i++) {
-                if (items[i].type === 'message') {
-                    if (items[i].data.role === 'user') lastUserIdx = i;
-                    if (items[i].data.role === 'assistant') lastAssistantIdx = i;
-                }
-            }
-            if (lastUserIdx >= 0) items[lastUserIdx].isLastUser = true;
-            if (lastAssistantIdx >= 0) items[lastAssistantIdx].isLastAssistant = true;
-
-            if (lastUserIdx < 0 && turn.events) {
-                const preEvents = this.getPreInterruptionUserEvents(turn.events);
-                if (preEvents.length) {
-                    const firstEventTs = Number(preEvents[0].time_unix_nano);
-                    let insertAt = items.length;
-                    for (let i = 0; i < items.length; i++) {
-                        if (items[i].timestamp > firstEventTs) {
-                            insertAt = i;
-                            break;
-                        }
-                    }
-                    items.splice(insertAt, 0, {
-                        type: 'user_events',
-                        data: preEvents,
-                        timestamp: firstEventTs,
-                    });
-                }
-            }
-
-            if (turn.carriedUserEvents && turn.carriedUserEvents.length) {
-                items.unshift({
-                    type: 'user_events',
-                    data: turn.carriedUserEvents,
-                    timestamp: Number(turn.carriedUserEvents[0].time_unix_nano),
-                });
-            }
-
-            const excludedStops = turn.excludedEarlyStops || new Set();
-            const allPreBotEvents = [
-                ...(turn.carriedBotEvents || []),
-                ...(lastAssistantIdx >= 0 && turn.events ? this.getPreInterruptionBotEvents(turn.events) : []),
-            ].filter(e => !excludedStops.has(e.time_unix_nano))
-             .sort((a, b) => Number(a.time_unix_nano) - Number(b.time_unix_nano));
-
-            if (allPreBotEvents.length) {
-                const assistantIdx = items.findIndex(i => i.type === 'message' && i.data.role === 'assistant');
-                const insertAt = assistantIdx >= 0 ? assistantIdx : items.length;
-                items.splice(insertAt, 0, {
-                    type: 'bot_events',
-                    data: allPreBotEvents,
-                    timestamp: Number(allPreBotEvents[0].time_unix_nano),
-                });
-            }
-
-            return items;
-        },
-
         getLatencyMetrics(latency) {
             if (!latency) return [];
             const order = [
@@ -241,7 +180,7 @@ function conversationViewMixin() {
                 ['function_call', 'function_call_seconds'],
                 ['text_aggregation', 'text_aggregation_seconds'],
                 ['tts ttfb', 'tts_ttfb'],
-                ['user→bot', 'user_bot_latency_seconds'],
+                ['user\u2192bot', 'user_bot_latency_seconds'],
             ];
             const metrics = [];
             for (const [label, key] of order) {
@@ -257,52 +196,6 @@ function conversationViewMixin() {
             return e.name.startsWith('vad_user') ||
                 e.name === 'user_started_speaking' ||
                 e.name === 'user_stopped_speaking';
-        },
-
-        getUserEvents(events) {
-            if (!events) return [];
-            return events.filter(e => this.isUserEvent(e));
-        },
-
-        getPreInterruptionUserEvents(events) {
-            if (!events) return [];
-            const lastInterruption = [...events].reverse().find(e => e.name === 'interruption');
-            if (!lastInterruption) return events.filter(e => this.isUserEvent(e));
-            const cutoffMs = Math.floor(Number(lastInterruption.time_unix_nano) / 1_000_000);
-            return events.filter(e => this.isUserEvent(e) && Math.floor(Number(e.time_unix_nano) / 1_000_000) < cutoffMs);
-        },
-
-        getPostInterruptionUserEvents(events) {
-            if (!events) return [];
-            const lastInterruption = [...events].reverse().find(e => e.name === 'interruption');
-            if (!lastInterruption) return [];
-            const cutoffMs = Math.floor(Number(lastInterruption.time_unix_nano) / 1_000_000);
-            return events.filter(e => this.isUserEvent(e) && Math.floor(Number(e.time_unix_nano) / 1_000_000) >= cutoffMs);
-        },
-
-        isBotEvent(e) {
-            return !this.isUserEvent(e);
-        },
-
-        getBotEvents(events) {
-            if (!events) return [];
-            return events.filter(e => this.isBotEvent(e));
-        },
-
-        getPreInterruptionBotEvents(events) {
-            if (!events) return [];
-            const lastInterruption = [...events].reverse().find(e => e.name === 'interruption');
-            if (!lastInterruption) return events.filter(e => this.isBotEvent(e));
-            const cutoffMs = Math.floor(Number(lastInterruption.time_unix_nano) / 1_000_000);
-            return events.filter(e => this.isBotEvent(e) && Math.floor(Number(e.time_unix_nano) / 1_000_000) < cutoffMs);
-        },
-
-        getPostInterruptionBotEvents(events) {
-            if (!events) return [];
-            const lastInterruption = [...events].reverse().find(e => e.name === 'interruption');
-            if (!lastInterruption) return [];
-            const cutoffMs = Math.floor(Number(lastInterruption.time_unix_nano) / 1_000_000);
-            return events.filter(e => this.isBotEvent(e) && Math.floor(Number(e.time_unix_nano) / 1_000_000) >= cutoffMs);
         },
 
         getFunctionCallAttributes(fc) {

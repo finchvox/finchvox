@@ -41,6 +41,7 @@ class Message:
     role: str
     content: str
     timestamp: int
+    end_timestamp: int
     was_interrupted: bool
     span_ids: list[str]
     chunks: list[dict] | None = None
@@ -66,6 +67,7 @@ class MessageAccumulator:
     texts: list[str] = None
     span_ids: list[str] = None
     timestamp: int = 0
+    end_timestamp: int = 0
     first_span: dict | None = None
     chunks: list[dict] = None
 
@@ -92,6 +94,7 @@ class MessageAccumulator:
         self.texts = [text]
         self.span_ids = [span.get("span_id_hex")]
         self.timestamp = span.get("start_time_unix_nano", 0)
+        self.end_timestamp = int(span.get("end_time_unix_nano", 0))
         self.first_span = span
         if heard_status:
             chunk = {"text": text, "heard_status": heard_status}
@@ -110,6 +113,7 @@ class MessageAccumulator:
     ):
         self.texts.append(text)
         self.span_ids.append(span.get("span_id_hex"))
+        self.end_timestamp = int(span.get("end_time_unix_nano", 0))
         if heard_status:
             chunk = {"text": text, "heard_status": heard_status}
             if gap_seconds is not None and gap_seconds > 0.5:
@@ -304,6 +308,7 @@ class Conversation:
             role=acc.role,
             content=" ".join(acc.texts),
             timestamp=acc.timestamp,
+            end_timestamp=acc.end_timestamp,
             was_interrupted=was_interrupted and acc.role == "assistant",
             span_ids=acc.span_ids,
             chunks=acc.chunks if acc.chunks else None,

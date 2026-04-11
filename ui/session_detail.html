@@ -310,140 +310,86 @@
                 <span class="text-white/40">No conversation messages for this session</span>
             </div>
 
-            <!-- Chat layout -->
-            <div class="flex-1 overflow-y-auto px-6 py-4" x-show="!conversationLoading && !conversationError && conversationTurns.length > 0">
-                <template x-for="(turn, tIndex) in conversationTurns" :key="tIndex">
-                    <div class="mb-6">
-                        <template x-for="(item, iIndex) in getChronologicalItems(turn)" :key="iIndex">
-                            <div>
-                                <!-- User message — left aligned -->
-                                <template x-if="item.type === 'message' && item.data.role === 'user'">
-                                    <div class="flex justify-start mb-3">
-                                        <div class="max-w-[48%]">
-                                            <div class="text-xs font-semibold uppercase tracking-wide text-[#f97316] mb-1">User</div>
-                                            <div class="bg-white/10 rounded-2xl px-4 py-3 cursor-pointer"
-                                                 @click="seekToMessage(item.data)"
-                                                 @mouseenter="seekToMessage(item.data)"
-                                                 @mouseleave="hideConversationMarker()">
-                                                <span class="text-sm text-white" x-text="item.data.content"></span>
-                                            </div>
-                                            <template x-if="item.isLastUser && getPreInterruptionUserEvents(turn.events).length">
-                                                <div class="mt-1">
-                                                    <template x-for="(ei, eiIdx) in getEventsWithGaps(getPreInterruptionUserEvents(turn.events))" :key="eiIdx">
-                                                        <div>
-                                                            <div x-show="ei.type === 'event'" class="text-xs text-white/30 font-mono" x-text="ei.data ? formatEventTime(ei.data.time_unix_nano) + '  ' + ei.data.name : ''"></div>
-                                                            <div x-show="ei.type === 'gap'" class="flex items-center gap-1 my-1">
-                                                                <div class="border-l border-dashed border-white/20 h-4 ml-3"></div>
-                                                                <span class="text-xs text-white/25 font-mono" x-text="formatGapDuration(ei.duration || 0)"></span>
-                                                            </div>
-                                                        </div>
-                                                    </template>
-                                                </div>
-                                            </template>
-                                        </div>
-                                    </div>
-                                </template>
+            <!-- Timeline layout -->
+            <div class="flex-1 overflow-y-auto" x-show="!conversationLoading && !conversationError && conversationTurns.length > 0">
+                <div class="relative mx-auto" :style="'height: ' + timelineHeight + 'px; max-width: 900px;'">
+                    <!-- Center line -->
+                    <div class="absolute left-1/2 top-0 bottom-0 w-px bg-white/10"></div>
 
-                                <!-- Orphaned/carried user events -->
-                                <template x-if="item.type === 'user_events'">
-                                    <div class="flex justify-start mb-3">
-                                        <div class="max-w-[48%]">
-                                            <template x-for="(ei, eiIdx) in getEventsWithGaps(item.data)" :key="eiIdx">
-                                                <div>
-                                                    <div x-show="ei.type === 'event'" class="text-xs text-white/30 font-mono" x-text="ei.data ? formatEventTime(ei.data.time_unix_nano) + '  ' + ei.data.name : ''"></div>
-                                                    <div x-show="ei.type === 'gap'" class="flex items-center gap-1 my-1">
-                                                        <div class="border-l border-dashed border-white/20 h-4 ml-3"></div>
-                                                        <span class="text-xs text-white/25 font-mono" x-text="formatGapDuration(ei.duration || 0)"></span>
-                                                    </div>
-                                                </div>
-                                            </template>
-                                        </div>
-                                    </div>
-                                </template>
+                    <template x-for="(item, idx) in timelineItems" :key="idx">
+                        <div class="absolute"
+                             :style="'top: ' + item.y + 'px; ' + (item.side === 'left' ? 'right: 52%; left: 16px;' : 'left: 52%; right: 16px;')">
 
-                                <!-- Latency breakdown — centered -->
-                                <template x-if="item.type === 'latency'">
-                                    <div class="flex justify-center my-3">
-                                        <div class="text-center">
-                                            <template x-for="(metric, mi) in getLatencyMetrics(item.data)" :key="mi">
-                                                <div class="text-xs text-white/40 font-mono" x-text="metric.label + ': ' + metric.value"></div>
-                                            </template>
-                                        </div>
-                                    </div>
-                                </template>
+                            <!-- Event marker -->
+                            <template x-if="item.type === 'event'">
+                                <div class="text-xs text-white/30 font-mono py-0.5"
+                                     :class="item.side === 'left' ? 'text-left' : 'text-right'"
+                                     x-text="formatEventTime(item.data.time_unix_nano) + '  ' + item.data.name"></div>
+                            </template>
 
-                                <!-- Bot events block — right aligned -->
-                                <template x-if="item.type === 'bot_events'">
-                                    <div class="flex justify-end mb-3">
-                                        <div class="max-w-[48%]">
-                                            <template x-for="(ei, eiIdx) in getEventsWithGaps(item.data)" :key="eiIdx">
-                                                <div>
-                                                    <div x-show="ei.type === 'event'" class="text-xs text-white/30 font-mono text-right" x-text="ei.data ? formatEventTime(ei.data.time_unix_nano) + '  ' + ei.data.name : ''"></div>
-                                                    <div x-show="ei.type === 'gap'" class="flex items-center justify-end gap-1 my-1">
-                                                        <span class="text-xs text-white/25 font-mono" x-text="formatGapDuration(ei.duration || 0)"></span>
-                                                        <div class="border-l border-dashed border-white/20 h-4 mr-3"></div>
-                                                    </div>
-                                                </div>
-                                            </template>
-                                        </div>
+                            <!-- User message -->
+                            <template x-if="item.type === 'message' && item.data.role === 'user'">
+                                <div>
+                                    <div class="text-xs font-semibold uppercase tracking-wide text-[#f97316] mb-1">User</div>
+                                    <div class="bg-white/10 rounded-2xl px-4 py-3 cursor-pointer"
+                                         :style="'min-height: ' + item.height + 'px;'"
+                                         @click="seekToMessage(item.data)"
+                                         @mouseenter="seekToMessage(item.data)"
+                                         @mouseleave="hideConversationMarker()">
+                                        <span class="text-sm text-white" x-text="item.data.content"></span>
                                     </div>
-                                </template>
+                                </div>
+                            </template>
 
-                                <!-- Function call — right aligned, cyan treatment -->
-                                <template x-if="item.type === 'function_call'">
-                                    <div class="flex justify-end mb-3">
-                                        <div class="max-w-[48%]">
-                                            <div class="text-xs font-semibold uppercase tracking-wide text-[#06b6d4] mb-1">Function Call</div>
-                                            <div class="border border-cyan-500/30 bg-cyan-900/10 rounded-lg px-4 py-3">
-                                                <div class="text-xs text-white/60 font-mono font-semibold mb-1" x-text="item.data.name"></div>
-                                                <div class="text-xs text-white/40 font-mono" x-text="'duration: ' + (item.data.duration_seconds * 1000).toFixed(0) + 'ms'"></div>
-                                                <template x-for="(attr, ai) in getFunctionCallAttributes(item.data)" :key="ai">
-                                                    <div class="text-xs text-white/40 font-mono" x-text="attr.key + ': ' + attr.value"></div>
-                                                </template>
-                                            </div>
-                                        </div>
-                                    </div>
-                                </template>
-
-                                <!-- Agent message — right aligned -->
-                                <template x-if="item.type === 'message' && item.data.role === 'assistant'">
-                                    <div class="flex justify-end mb-3">
-                                        <div class="max-w-[48%]">
-                                            <div class="text-xs font-semibold uppercase tracking-wide text-[#a855f7] mb-1 text-right">Agent</div>
-                                            <div class="bg-purple-900/40 rounded-2xl px-4 py-3 cursor-pointer"
-                                                 @click="seekToMessage(item.data)"
-                                                 @mouseenter="seekToMessage(item.data)"
-                                                 @mouseleave="hideConversationMarker()">
-                                                <span x-show="!item.data.chunks" class="text-sm text-white" x-text="item.data.content"></span>
-                                                <span x-show="item.data.chunks" class="text-sm">
-                                                    <template x-for="(chunk, ci) in (item.data.chunks || [])" :key="ci">
-                                                        <span>
-                                                            <br x-show="chunk.gap_seconds">
-                                                            <span :class="chunk.heard_status === 'heard' ? 'text-white' : 'text-white/40'" x-text="(ci > 0 && !chunk.gap_seconds ? ' ' : '') + chunk.text"></span>
-                                                        </span>
-                                                    </template>
+                            <!-- Agent message -->
+                            <template x-if="item.type === 'message' && item.data.role === 'assistant'">
+                                <div>
+                                    <div class="text-xs font-semibold uppercase tracking-wide text-[#a855f7] mb-1"
+                                         :class="item.side === 'right' ? 'text-right' : ''">Agent</div>
+                                    <div class="bg-purple-900/40 rounded-2xl px-4 py-3 cursor-pointer"
+                                         :style="'min-height: ' + item.height + 'px;'"
+                                         @click="seekToMessage(item.data)"
+                                         @mouseenter="seekToMessage(item.data)"
+                                         @mouseleave="hideConversationMarker()">
+                                        <span x-show="!item.data.chunks" class="text-sm text-white" x-text="item.data.content"></span>
+                                        <span x-show="item.data.chunks" class="text-sm">
+                                            <template x-for="(chunk, ci) in (item.data.chunks || [])" :key="ci">
+                                                <span>
+                                                    <br x-show="chunk.gap_seconds">
+                                                    <span :class="chunk.heard_status === 'heard' ? 'text-white' : 'text-white/40'" x-text="(ci > 0 && !chunk.gap_seconds ? ' ' : '') + chunk.text"></span>
                                                 </span>
-                                            </div>
-                                            <template x-if="item.isLastAssistant && getPostAgentBotEvents(turn).length">
-                                                <div class="mt-1">
-                                                    <template x-for="(ei, eiIdx) in getEventsWithGaps(getPostAgentBotEvents(turn))" :key="eiIdx">
-                                                        <div>
-                                                            <div x-show="ei.type === 'event'" class="text-xs text-white/30 font-mono text-right" x-text="ei.data ? formatEventTime(ei.data.time_unix_nano) + '  ' + ei.data.name : ''"></div>
-                                                            <div x-show="ei.type === 'gap'" class="flex items-center justify-end gap-1 my-1">
-                                                                <span class="text-xs text-white/25 font-mono" x-text="formatGapDuration(ei.duration || 0)"></span>
-                                                                <div class="border-l border-dashed border-white/20 h-4 mr-3"></div>
-                                                            </div>
-                                                        </div>
-                                                    </template>
-                                                </div>
                                             </template>
-                                        </div>
+                                        </span>
                                     </div>
-                                </template>
-                            </div>
-                        </template>
-                    </div>
-                </template>
+                                </div>
+                            </template>
+
+                            <!-- Function call -->
+                            <template x-if="item.type === 'function_call'">
+                                <div>
+                                    <div class="text-xs font-semibold uppercase tracking-wide text-[#06b6d4] mb-1">Function Call</div>
+                                    <div class="border border-cyan-500/30 bg-cyan-900/10 rounded-lg px-4 py-3"
+                                         :style="'min-height: ' + item.height + 'px;'">
+                                        <div class="text-xs text-white/60 font-mono font-semibold mb-1" x-text="item.data.name"></div>
+                                        <div class="text-xs text-white/40 font-mono" x-text="'duration: ' + (item.data.duration_seconds * 1000).toFixed(0) + 'ms'"></div>
+                                        <template x-for="(attr, ai) in getFunctionCallAttributes(item.data)" :key="ai">
+                                            <div class="text-xs text-white/40 font-mono" x-text="attr.key + ': ' + attr.value"></div>
+                                        </template>
+                                    </div>
+                                </div>
+                            </template>
+
+                            <!-- Latency block -->
+                            <template x-if="item.type === 'latency'">
+                                <div>
+                                    <template x-for="(metric, mi) in getLatencyMetrics(item.data)" :key="mi">
+                                        <div class="text-xs text-white/40 font-mono text-right" x-text="metric.label + ': ' + metric.value"></div>
+                                    </template>
+                                </div>
+                            </template>
+                        </div>
+                    </template>
+                </div>
             </div>
         </div>
     </main>

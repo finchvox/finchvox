@@ -87,6 +87,47 @@ class TestTurnLatencyInConversation:
         assert assistant_msg.latency.tts_ttfb == 0.024
         assert assistant_msg.latency.user_bot_latency_seconds == 1.782
 
+    def test_message_has_end_timestamp(self):
+        turn = _span(
+            "turn",
+            "turn1",
+            1000,
+            parent_id="conv1",
+            attributes=[_attr("turn.was_interrupted", False)],
+        )
+        stt = _span(
+            "stt",
+            "stt1",
+            1000,
+            parent_id="turn1",
+            attributes=[_attr("transcript", "hello")],
+        )
+        tts1 = {
+            "name": "tts",
+            "span_id_hex": "tts1",
+            "start_time_unix_nano": "3000",
+            "end_time_unix_nano": "5000",
+            "parent_span_id_hex": "turn1",
+            "attributes": [_attr("text", "hi")],
+        }
+        tts2 = {
+            "name": "tts",
+            "span_id_hex": "tts2",
+            "start_time_unix_nano": "5000",
+            "end_time_unix_nano": "8000",
+            "parent_span_id_hex": "turn1",
+            "attributes": [_attr("text", "there")],
+        }
+
+        conv = Conversation([turn, stt, tts1, tts2])
+        messages = conv.get_messages()
+
+        user_msg = messages[0]
+        assert user_msg.end_timestamp == 1000 + 1_000_000_000
+
+        assistant_msg = messages[1]
+        assert assistant_msg.end_timestamp == 8000
+
     def test_latency_dict_omits_none_values(self):
         latency = TurnLatency(llm_ttfb=0.5, tts_ttfb=0.02)
         d = latency.to_dict()
