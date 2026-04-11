@@ -15,9 +15,28 @@ function conversationViewMixin() {
                 const data = await response.json();
                 const turns = data.turns;
                 for (let i = 0; i < turns.length - 1; i++) {
-                    const postEvents = this.getPostInterruptionUserEvents(turns[i].events);
-                    if (postEvents.length) {
-                        turns[i + 1].carriedUserEvents = postEvents;
+                    const postUserEvents = this.getPostInterruptionUserEvents(turns[i].events);
+                    if (postUserEvents.length) {
+                        turns[i + 1].carriedUserEvents = postUserEvents;
+                    }
+                    const postBotEvents = this.getPostInterruptionBotEvents(turns[i].events)
+                        .filter(e => e.name === 'bot_started_speaking');
+                    if (postBotEvents.length) {
+                        turns[i + 1].carriedBotEvents = postBotEvents;
+                    }
+
+                    const nextBotEvents = this.getBotEvents(turns[i + 1].events || []);
+                    const earlyStops = [];
+                    for (const e of nextBotEvents) {
+                        if (e.name === 'bot_stopped_speaking') {
+                            earlyStops.push(e);
+                        } else {
+                            break;
+                        }
+                    }
+                    if (earlyStops.length) {
+                        turns[i].trailingBotEvents = earlyStops;
+                        turns[i + 1].excludedEarlyStops = new Set(earlyStops.map(e => e.time_unix_nano));
                     }
                 }
                 this.conversationTurns = turns;
@@ -87,6 +106,35 @@ function conversationViewMixin() {
             if (seconds == null) return '';
             const ms = (seconds * 1000).toFixed(0);
             return `${ms}ms`;
+        },
+
+        getPostAgentBotEvents(turn) {
+            const postInterruption = this.getPostInterruptionBotEvents(turn.events || []);
+            const trailing = turn.trailingBotEvents || [];
+            return [...postInterruption, ...trailing]
+                .sort((a, b) => Number(a.time_unix_nano) - Number(b.time_unix_nano));
+        },
+
+        getEventsWithGaps(events) {
+            if (!events || !events.length) return [];
+            const result = [];
+            for (let i = 0; i < events.length; i++) {
+                result.push({ type: 'event', data: events[i] });
+                if (i < events.length - 1) {
+                    const currNs = Number(events[i].time_unix_nano);
+                    const nextNs = Number(events[i + 1].time_unix_nano);
+                    const gapSeconds = (nextNs - currNs) / 1_000_000_000;
+                    if (gapSeconds >= 1.0) {
+                        result.push({ type: 'gap', duration: gapSeconds });
+                    }
+                }
+            }
+            return result;
+        },
+
+        formatGapDuration(seconds) {
+            if (seconds < 60) return seconds.toFixed(1) + 's';
+            return (seconds / 60).toFixed(1) + 'm';
         },
 
         getChronologicalItems(turn) {
@@ -164,6 +212,23 @@ function conversationViewMixin() {
                 });
             }
 
+            const excludedStops = turn.excludedEarlyStops || new Set();
+            const allPreBotEvents = [
+                ...(turn.carriedBotEvents || []),
+                ...(lastAssistantIdx >= 0 && turn.events ? this.getPreInterruptionBotEvents(turn.events) : []),
+            ].filter(e => !excludedStops.has(e.time_unix_nano))
+             .sort((a, b) => Number(a.time_unix_nano) - Number(b.time_unix_nano));
+
+            if (allPreBotEvents.length) {
+                const assistantIdx = items.findIndex(i => i.type === 'message' && i.data.role === 'assistant');
+                const insertAt = assistantIdx >= 0 ? assistantIdx : items.length;
+                items.splice(insertAt, 0, {
+                    type: 'bot_events',
+                    data: allPreBotEvents,
+                    timestamp: Number(allPreBotEvents[0].time_unix_nano),
+                });
+            }
+
             return items;
         },
 
@@ -215,9 +280,29 @@ function conversationViewMixin() {
             return events.filter(e => this.isUserEvent(e) && Math.floor(Number(e.time_unix_nano) / 1_000_000) >= cutoffMs);
         },
 
+        isBotEvent(e) {
+            return !this.isUserEvent(e);
+        },
+
         getBotEvents(events) {
             if (!events) return [];
-            return events.filter(e => !this.isUserEvent(e));
+            return events.filter(e => this.isBotEvent(e));
+        },
+
+        getPreInterruptionBotEvents(events) {
+            if (!events) return [];
+            const lastInterruption = [...events].reverse().find(e => e.name === 'interruption');
+            if (!lastInterruption) return events.filter(e => this.isBotEvent(e));
+            const cutoffMs = Math.floor(Number(lastInterruption.time_unix_nano) / 1_000_000);
+            return events.filter(e => this.isBotEvent(e) && Math.floor(Number(e.time_unix_nano) / 1_000_000) < cutoffMs);
+        },
+
+        getPostInterruptionBotEvents(events) {
+            if (!events) return [];
+            const lastInterruption = [...events].reverse().find(e => e.name === 'interruption');
+            if (!lastInterruption) return [];
+            const cutoffMs = Math.floor(Number(lastInterruption.time_unix_nano) / 1_000_000);
+            return events.filter(e => this.isBotEvent(e) && Math.floor(Number(e.time_unix_nano) / 1_000_000) >= cutoffMs);
         },
 
         getFunctionCallAttributes(fc) {

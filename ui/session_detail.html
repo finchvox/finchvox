@@ -329,8 +329,14 @@
                                             </div>
                                             <template x-if="item.isLastUser && getPreInterruptionUserEvents(turn.events).length">
                                                 <div class="mt-1">
-                                                    <template x-for="evt in getPreInterruptionUserEvents(turn.events)" :key="evt.time_unix_nano">
-                                                        <div class="text-xs text-white/20 font-mono" x-text="formatEventTime(evt.time_unix_nano) + '  ' + evt.name"></div>
+                                                    <template x-for="(ei, eiIdx) in getEventsWithGaps(getPreInterruptionUserEvents(turn.events))" :key="eiIdx">
+                                                        <div>
+                                                            <div x-show="ei.type === 'event'" class="text-xs text-white/30 font-mono" x-text="ei.data ? formatEventTime(ei.data.time_unix_nano) + '  ' + ei.data.name : ''"></div>
+                                                            <div x-show="ei.type === 'gap'" class="flex items-center gap-1 my-1">
+                                                                <div class="border-l border-dashed border-white/20 h-4 ml-3"></div>
+                                                                <span class="text-xs text-white/25 font-mono" x-text="formatGapDuration(ei.duration || 0)"></span>
+                                                            </div>
+                                                        </div>
                                                     </template>
                                                 </div>
                                             </template>
@@ -338,12 +344,18 @@
                                     </div>
                                 </template>
 
-                                <!-- Orphaned user events (turn has no user message) -->
+                                <!-- Orphaned/carried user events -->
                                 <template x-if="item.type === 'user_events'">
                                     <div class="flex justify-start mb-3">
                                         <div class="max-w-[48%]">
-                                            <template x-for="evt in item.data" :key="evt.time_unix_nano">
-                                                <div class="text-xs text-white/20 font-mono" x-text="formatEventTime(evt.time_unix_nano) + '  ' + evt.name"></div>
+                                            <template x-for="(ei, eiIdx) in getEventsWithGaps(item.data)" :key="eiIdx">
+                                                <div>
+                                                    <div x-show="ei.type === 'event'" class="text-xs text-white/30 font-mono" x-text="ei.data ? formatEventTime(ei.data.time_unix_nano) + '  ' + ei.data.name : ''"></div>
+                                                    <div x-show="ei.type === 'gap'" class="flex items-center gap-1 my-1">
+                                                        <div class="border-l border-dashed border-white/20 h-4 ml-3"></div>
+                                                        <span class="text-xs text-white/25 font-mono" x-text="formatGapDuration(ei.duration || 0)"></span>
+                                                    </div>
+                                                </div>
                                             </template>
                                         </div>
                                     </div>
@@ -354,7 +366,24 @@
                                     <div class="flex justify-center my-3">
                                         <div class="text-center">
                                             <template x-for="(metric, mi) in getLatencyMetrics(item.data)" :key="mi">
-                                                <div class="text-xs text-white/25 font-mono" x-text="metric.label + ': ' + metric.value"></div>
+                                                <div class="text-xs text-white/40 font-mono" x-text="metric.label + ': ' + metric.value"></div>
+                                            </template>
+                                        </div>
+                                    </div>
+                                </template>
+
+                                <!-- Bot events block — right aligned -->
+                                <template x-if="item.type === 'bot_events'">
+                                    <div class="flex justify-end mb-3">
+                                        <div class="max-w-[48%]">
+                                            <template x-for="(ei, eiIdx) in getEventsWithGaps(item.data)" :key="eiIdx">
+                                                <div>
+                                                    <div x-show="ei.type === 'event'" class="text-xs text-white/30 font-mono text-right" x-text="ei.data ? formatEventTime(ei.data.time_unix_nano) + '  ' + ei.data.name : ''"></div>
+                                                    <div x-show="ei.type === 'gap'" class="flex items-center justify-end gap-1 my-1">
+                                                        <span class="text-xs text-white/25 font-mono" x-text="formatGapDuration(ei.duration || 0)"></span>
+                                                        <div class="border-l border-dashed border-white/20 h-4 mr-3"></div>
+                                                    </div>
+                                                </div>
                                             </template>
                                         </div>
                                     </div>
@@ -367,9 +396,9 @@
                                             <div class="text-xs font-semibold uppercase tracking-wide text-[#06b6d4] mb-1">Function Call</div>
                                             <div class="border border-cyan-500/30 bg-cyan-900/10 rounded-lg px-4 py-3">
                                                 <div class="text-xs text-white/60 font-mono font-semibold mb-1" x-text="item.data.name"></div>
-                                                <div class="text-xs text-white/30 font-mono" x-text="'duration: ' + (item.data.duration_seconds * 1000).toFixed(0) + 'ms'"></div>
+                                                <div class="text-xs text-white/40 font-mono" x-text="'duration: ' + (item.data.duration_seconds * 1000).toFixed(0) + 'ms'"></div>
                                                 <template x-for="(attr, ai) in getFunctionCallAttributes(item.data)" :key="ai">
-                                                    <div class="text-xs text-white/25 font-mono" x-text="attr.key + ': ' + attr.value"></div>
+                                                    <div class="text-xs text-white/40 font-mono" x-text="attr.key + ': ' + attr.value"></div>
                                                 </template>
                                             </div>
                                         </div>
@@ -395,10 +424,16 @@
                                                     </template>
                                                 </span>
                                             </div>
-                                            <template x-if="item.isLastAssistant && getBotEvents(turn.events).length">
+                                            <template x-if="item.isLastAssistant && getPostAgentBotEvents(turn).length">
                                                 <div class="mt-1">
-                                                    <template x-for="evt in getBotEvents(turn.events)" :key="evt.time_unix_nano">
-                                                        <div class="text-xs text-white/20 font-mono text-right" x-text="formatEventTime(evt.time_unix_nano) + '  ' + evt.name"></div>
+                                                    <template x-for="(ei, eiIdx) in getEventsWithGaps(getPostAgentBotEvents(turn))" :key="eiIdx">
+                                                        <div>
+                                                            <div x-show="ei.type === 'event'" class="text-xs text-white/30 font-mono text-right" x-text="ei.data ? formatEventTime(ei.data.time_unix_nano) + '  ' + ei.data.name : ''"></div>
+                                                            <div x-show="ei.type === 'gap'" class="flex items-center justify-end gap-1 my-1">
+                                                                <span class="text-xs text-white/25 font-mono" x-text="formatGapDuration(ei.duration || 0)"></span>
+                                                                <div class="border-l border-dashed border-white/20 h-4 mr-3"></div>
+                                                            </div>
+                                                        </div>
                                                     </template>
                                                 </div>
                                             </template>
