@@ -155,7 +155,7 @@ async def _handle_get_session_conversation(
 ) -> JSONResponse:
     spans = _get_session_spans(data_dir, session_id)
     conversation = Conversation(spans)
-    return JSONResponse({"messages": conversation.to_dict_list()})
+    return JSONResponse({"turns": conversation.to_turns_dict_list()})
 
 
 async def _handle_get_session_audio(
