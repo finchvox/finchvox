@@ -310,56 +310,105 @@
                 <span class="text-white/40">No conversation messages for this session</span>
             </div>
 
-            <!-- Turns table -->
-            <div class="flex-1 overflow-y-auto" x-show="!conversationLoading && !conversationError && conversationTurns.length > 0">
-                <table class="w-full">
-                    <thead class="sticky top-0 bg-[#111] z-10">
-                        <tr class="border-b border-white/10 text-left">
-                            <th class="py-3 px-4 text-xs font-semibold text-white/50 uppercase tracking-wide w-16">Turn</th>
-                            <th class="py-3 px-4 text-xs font-semibold text-white/50 uppercase tracking-wide">Conversation</th>
-                            <th class="py-3 px-4 text-xs font-semibold text-white/50 uppercase tracking-wide w-24 text-right">Latency</th>
-                        </tr>
-                    </thead>
-                    <tbody>
-                        <template x-for="(turn, tIndex) in conversationTurns" :key="tIndex">
-                            <tr class="border-b border-white/5 align-top transition-colors even:bg-[#0f0f0f]">
-                                <td class="py-3 px-4 text-sm text-white/40 font-mono" x-text="turn.turn_number || ''"></td>
-                                <td class="py-3 px-4">
-                                    <!-- Messages -->
-                                    <template x-for="(message, mIndex) in turn.messages" :key="mIndex">
-                                        <div class="mb-2 cursor-pointer"
-                                             @click="seekToMessage(message)"
-                                             @mouseenter="seekToMessage(message)"
-                                             @mouseleave="hideConversationMarker()">
-                                            <span class="text-xs font-semibold uppercase tracking-wide mr-2"
-                                                  :class="message.role === 'user' ? 'text-[#f97316]' : 'text-[#a855f7]'"
-                                                  x-text="message.role === 'user' ? 'User' : 'Agent'"></span>
-                                            <span x-show="!message.chunks" class="text-sm text-white" x-text="message.content"></span>
-                                            <span x-show="message.chunks" class="text-sm">
-                                                <template x-for="(chunk, ci) in (message.chunks || [])" :key="ci">
-                                                    <span :class="chunk.heard_status === 'heard' ? 'text-white' : 'text-white/40'" x-text="(ci > 0 ? ' ' : '') + chunk.text"></span>
-                                                </template>
-                                            </span>
+            <!-- Chat layout -->
+            <div class="flex-1 overflow-y-auto px-6 py-4" x-show="!conversationLoading && !conversationError && conversationTurns.length > 0">
+                <template x-for="(turn, tIndex) in conversationTurns" :key="tIndex">
+                    <div class="mb-6">
+                        <template x-for="(item, iIndex) in getChronologicalItems(turn)" :key="iIndex">
+                            <div>
+                                <!-- User message — left aligned -->
+                                <template x-if="item.type === 'message' && item.data.role === 'user'">
+                                    <div class="flex justify-start mb-3">
+                                        <div class="max-w-[48%]">
+                                            <div class="text-xs font-semibold uppercase tracking-wide text-[#f97316] mb-1">User</div>
+                                            <div class="bg-white/10 rounded-2xl px-4 py-3 cursor-pointer"
+                                                 @click="seekToMessage(item.data)"
+                                                 @mouseenter="seekToMessage(item.data)"
+                                                 @mouseleave="hideConversationMarker()">
+                                                <span class="text-sm text-white" x-text="item.data.content"></span>
+                                            </div>
+                                            <template x-if="item.isLastUser && getPreInterruptionUserEvents(turn.events).length">
+                                                <div class="mt-1">
+                                                    <template x-for="evt in getPreInterruptionUserEvents(turn.events)" :key="evt.time_unix_nano">
+                                                        <div class="text-xs text-white/20 font-mono" x-text="formatEventTime(evt.time_unix_nano) + '  ' + evt.name"></div>
+                                                    </template>
+                                                </div>
+                                            </template>
                                         </div>
-                                    </template>
-                                    <!-- Latency breakdown -->
-                                    <div x-show="turn.latency" class="mt-1">
-                                        <span class="text-xs text-white/25 font-mono" x-text="formatLatencyRow(turn.latency)"></span>
                                     </div>
-                                    <!-- Span events -->
-                                    <div x-show="turn.events && turn.events.length" class="mt-1">
-                                        <template x-for="evt in (turn.events || [])" :key="evt.time_unix_nano">
-                                            <div class="text-xs text-white/20 font-mono" x-text="formatEventTime(evt.time_unix_nano) + '  ' + evt.name"></div>
-                                        </template>
+                                </template>
+
+                                <!-- Orphaned user events (turn has no user message) -->
+                                <template x-if="item.type === 'user_events'">
+                                    <div class="flex justify-start mb-3">
+                                        <div class="max-w-[48%]">
+                                            <template x-for="evt in item.data" :key="evt.time_unix_nano">
+                                                <div class="text-xs text-white/20 font-mono" x-text="formatEventTime(evt.time_unix_nano) + '  ' + evt.name"></div>
+                                            </template>
+                                        </div>
                                     </div>
-                                </td>
-                                <td class="py-3 px-4 text-right">
-                                    <span x-show="turn.user_bot_latency_seconds != null" class="text-sm font-mono text-white/70" x-text="formatTurnLatencyMs(turn.user_bot_latency_seconds)"></span>
-                                </td>
-                            </tr>
+                                </template>
+
+                                <!-- Latency breakdown — centered -->
+                                <template x-if="item.type === 'latency'">
+                                    <div class="flex justify-center my-3">
+                                        <div class="text-center">
+                                            <template x-for="(metric, mi) in getLatencyMetrics(item.data)" :key="mi">
+                                                <div class="text-xs text-white/25 font-mono" x-text="metric.label + ': ' + metric.value"></div>
+                                            </template>
+                                        </div>
+                                    </div>
+                                </template>
+
+                                <!-- Function call — right aligned, cyan treatment -->
+                                <template x-if="item.type === 'function_call'">
+                                    <div class="flex justify-end mb-3">
+                                        <div class="max-w-[48%]">
+                                            <div class="text-xs font-semibold uppercase tracking-wide text-[#06b6d4] mb-1">Function Call</div>
+                                            <div class="border border-cyan-500/30 bg-cyan-900/10 rounded-lg px-4 py-3">
+                                                <div class="text-xs text-white/60 font-mono font-semibold mb-1" x-text="item.data.name"></div>
+                                                <div class="text-xs text-white/30 font-mono" x-text="'duration: ' + (item.data.duration_seconds * 1000).toFixed(0) + 'ms'"></div>
+                                                <template x-for="(attr, ai) in getFunctionCallAttributes(item.data)" :key="ai">
+                                                    <div class="text-xs text-white/25 font-mono" x-text="attr.key + ': ' + attr.value"></div>
+                                                </template>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </template>
+
+                                <!-- Agent message — right aligned -->
+                                <template x-if="item.type === 'message' && item.data.role === 'assistant'">
+                                    <div class="flex justify-end mb-3">
+                                        <div class="max-w-[48%]">
+                                            <div class="text-xs font-semibold uppercase tracking-wide text-[#a855f7] mb-1 text-right">Agent</div>
+                                            <div class="bg-purple-900/40 rounded-2xl px-4 py-3 cursor-pointer"
+                                                 @click="seekToMessage(item.data)"
+                                                 @mouseenter="seekToMessage(item.data)"
+                                                 @mouseleave="hideConversationMarker()">
+                                                <span x-show="!item.data.chunks" class="text-sm text-white" x-text="item.data.content"></span>
+                                                <span x-show="item.data.chunks" class="text-sm">
+                                                    <template x-for="(chunk, ci) in (item.data.chunks || [])" :key="ci">
+                                                        <span>
+                                                            <br x-show="chunk.gap_seconds">
+                                                            <span :class="chunk.heard_status === 'heard' ? 'text-white' : 'text-white/40'" x-text="(ci > 0 && !chunk.gap_seconds ? ' ' : '') + chunk.text"></span>
+                                                        </span>
+                                                    </template>
+                                                </span>
+                                            </div>
+                                            <template x-if="item.isLastAssistant && getBotEvents(turn.events).length">
+                                                <div class="mt-1">
+                                                    <template x-for="evt in getBotEvents(turn.events)" :key="evt.time_unix_nano">
+                                                        <div class="text-xs text-white/20 font-mono text-right" x-text="formatEventTime(evt.time_unix_nano) + '  ' + evt.name"></div>
+                                                    </template>
+                                                </div>
+                                            </template>
+                                        </div>
+                                    </div>
+                                </template>
+                            </div>
                         </template>
-                    </tbody>
-                </table>
+                    </div>
+                </template>
             </div>
         </div>
     </main>

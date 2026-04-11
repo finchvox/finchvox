@@ -19,6 +19,24 @@ class TurnLatency:
 
 
 @dataclass
+class FunctionCall:
+    name: str
+    start_time_unix_nano: int
+    end_time_unix_nano: int
+    duration_seconds: float
+    attributes: dict
+
+    def to_dict(self) -> dict:
+        return {
+            "name": self.name,
+            "start_time_unix_nano": self.start_time_unix_nano,
+            "end_time_unix_nano": self.end_time_unix_nano,
+            "duration_seconds": self.duration_seconds,
+            "attributes": self.attributes,
+        }
+
+
+@dataclass
 class Message:
     role: str
     content: str
@@ -62,21 +80,41 @@ class MessageAccumulator:
     def has_content(self) -> bool:
         return bool(self.texts and self.role)
 
-    def reset(self, role: str, text: str, span: dict, heard_status: str | None = None):
+    def reset(
+        self,
+        role: str,
+        text: str,
+        span: dict,
+        heard_status: str | None = None,
+        gap_seconds: float | None = None,
+    ):
         self.role = role
         self.texts = [text]
         self.span_ids = [span.get("span_id_hex")]
         self.timestamp = span.get("start_time_unix_nano", 0)
         self.first_span = span
-        self.chunks = (
-            [{"text": text, "heard_status": heard_status}] if heard_status else []
-        )
+        if heard_status:
+            chunk = {"text": text, "heard_status": heard_status}
+            if gap_seconds is not None and gap_seconds > 0.5:
+                chunk["gap_seconds"] = round(gap_seconds, 1)
+            self.chunks = [chunk]
+        else:
+            self.chunks = []
 
-    def append(self, text: str, span: dict, heard_status: str | None = None):
+    def append(
+        self,
+        text: str,
+        span: dict,
+        heard_status: str | None = None,
+        gap_seconds: float | None = None,
+    ):
         self.texts.append(text)
         self.span_ids.append(span.get("span_id_hex"))
         if heard_status:
-            self.chunks.append({"text": text, "heard_status": heard_status})
+            chunk = {"text": text, "heard_status": heard_status}
+            if gap_seconds is not None and gap_seconds > 0.5:
+                chunk["gap_seconds"] = round(gap_seconds, 1)
+            self.chunks.append(chunk)
 
 
 @dataclass
@@ -86,6 +124,7 @@ class Turn:
     latency: TurnLatency | None = None
     events: list[dict] | None = None
     user_bot_latency_seconds: float | None = None
+    function_calls: list[FunctionCall] | None = None
 
     def to_dict(self) -> dict:
         d = {
@@ -98,6 +137,8 @@ class Turn:
             d["events"] = self.events
         if self.user_bot_latency_seconds is not None:
             d["user_bot_latency_seconds"] = self.user_bot_latency_seconds
+        if self.function_calls:
+            d["function_calls"] = [fc.to_dict() for fc in self.function_calls]
         return d
 
 
@@ -417,6 +458,7 @@ class Conversation:
         messages: list[Message] = []
         acc = MessageAccumulator()
         acc_tts_spans: list[dict] = []
+        prev_tts_end: int | None = None
 
         for span in spans_sorted:
             text = self._get_span_text(span)
@@ -425,18 +467,31 @@ class Conversation:
 
             role = self._get_span_role(span)
             heard_status, _ = self._get_heard_status(span)
+
+            gap_seconds = None
+            if span.get("name") == "tts" and prev_tts_end is not None:
+                gap_seconds = (
+                    int(span.get("start_time_unix_nano", 0)) - prev_tts_end
+                ) / 1_000_000_000
+
             if role == acc.role:
-                acc.append(text, span, heard_status)
+                acc.append(text, span, heard_status, gap_seconds)
                 if span.get("name") == "tts":
                     acc_tts_spans.append(span)
+                    prev_tts_end = int(span.get("end_time_unix_nano", 0))
                 continue
 
             if acc.chunks and acc_tts_spans:
                 self._refine_chunk_statuses(acc.chunks, acc_tts_spans)
                 self._split_chunks_with_ground_truth(acc.chunks, acc_tts_spans)
             self._flush_accumulator(acc, messages, check_interruption)
-            acc.reset(role, text, span, heard_status)
-            acc_tts_spans = [span] if span.get("name") == "tts" else []
+            acc.reset(role, text, span, heard_status, gap_seconds)
+            if span.get("name") == "tts":
+                acc_tts_spans = [span]
+                prev_tts_end = int(span.get("end_time_unix_nano", 0))
+            else:
+                acc_tts_spans = []
+                prev_tts_end = None
 
         if acc.chunks and acc_tts_spans:
             self._refine_chunk_statuses(acc.chunks, acc_tts_spans)
@@ -545,6 +600,41 @@ class Conversation:
         )
         return latency if latency.has_data() else None
 
+    def _get_function_calls_for_turn(self, turn: dict) -> list[FunctionCall] | None:
+        turn_id = turn.get("span_id_hex")
+        children = self._get_children_of(turn_id)
+        fc_spans = [c for c in children if c.get("name") == "function_call"]
+        if not fc_spans:
+            return None
+
+        fc_spans.sort(key=lambda s: int(s.get("start_time_unix_nano", 0)))
+        result = []
+        for span in fc_spans:
+            start = int(span.get("start_time_unix_nano", 0))
+            end = int(span.get("end_time_unix_nano", 0))
+            attrs = {}
+            for attr in span.get("attributes", []):
+                key = attr.get("key")
+                value = attr.get("value", {})
+                attrs[key] = (
+                    value.get("string_value")
+                    or value.get("bool_value")
+                    or value.get("int_value")
+                    or value.get("double_value")
+                )
+            result.append(
+                FunctionCall(
+                    name=attrs.get("tool.function_name", "unknown"),
+                    start_time_unix_nano=start,
+                    end_time_unix_nano=end,
+                    duration_seconds=(end - start) / 1_000_000_000
+                    if end > start
+                    else 0,
+                    attributes=attrs,
+                )
+            )
+        return result
+
     def get_turns(self) -> list[Turn]:
         messages = self.get_messages()
 
@@ -573,6 +663,7 @@ class Conversation:
             latency = self._build_turn_latency(turn)
             events = self._get_turn_events(turn)
             user_bot = self._get_attribute(turn, "turn.user_bot_latency_seconds")
+            function_calls = self._get_function_calls_for_turn(turn)
 
             turns.append(
                 Turn(
@@ -581,6 +672,7 @@ class Conversation:
                     latency=latency,
                     events=events or None,
                     user_bot_latency_seconds=user_bot,
+                    function_calls=function_calls,
                 )
             )
 

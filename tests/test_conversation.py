@@ -202,3 +202,181 @@ class TestTurnLatencyInConversation:
         dicts = conv.to_dict_list()
 
         assert "latency" not in dicts[0]
+
+
+def _fc_span(span_id, start_nano, end_nano, parent_id, attributes=None):
+    s = {
+        "name": "function_call",
+        "span_id_hex": span_id,
+        "start_time_unix_nano": str(start_nano),
+        "end_time_unix_nano": str(end_nano),
+        "attributes": attributes or [],
+    }
+    if parent_id:
+        s["parent_span_id_hex"] = parent_id
+    return s
+
+
+class TestFunctionCallsInTurns:
+    def test_turn_includes_function_calls(self):
+        turn = _span(
+            "turn",
+            "turn1",
+            1000,
+            parent_id="conv1",
+            attributes=[_attr("turn.number", 1)],
+        )
+        stt = _span(
+            "stt",
+            "stt1",
+            1000,
+            parent_id="turn1",
+            attributes=[_attr("transcript", "check the weather")],
+        )
+        fc = _fc_span(
+            "fc1",
+            2000,
+            3000,
+            parent_id="turn1",
+            attributes=[
+                _attr("tool.function_name", "get_weather"),
+                _attr("tool.call_id", "call_123"),
+            ],
+        )
+        tts = _span(
+            "tts",
+            "tts1",
+            4000,
+            parent_id="turn1",
+            attributes=[_attr("text", "It's sunny")],
+        )
+
+        conv = Conversation([turn, stt, fc, tts])
+        turns = conv.to_turns_dict_list()
+
+        assert len(turns) == 1
+        assert "function_calls" in turns[0]
+        assert len(turns[0]["function_calls"]) == 1
+        assert turns[0]["function_calls"][0]["name"] == "get_weather"
+
+    def test_function_call_attributes_extracted(self):
+        turn = _span(
+            "turn",
+            "turn1",
+            1000,
+            parent_id="conv1",
+            attributes=[_attr("turn.number", 1)],
+        )
+        fc = _fc_span(
+            "fc1",
+            2000,
+            3500,
+            parent_id="turn1",
+            attributes=[
+                _attr("tool.function_name", "get_weather"),
+                _attr("tool.call_id", "call_123"),
+                _attr("tool.arguments", '{"city": "SF"}'),
+                _attr("tool.result", '{"temp": 72}'),
+                _attr("tool.result_status", "success"),
+            ],
+        )
+        tts = _span(
+            "tts",
+            "tts1",
+            4000,
+            parent_id="turn1",
+            attributes=[_attr("text", "It's sunny")],
+        )
+
+        conv = Conversation([turn, fc, tts])
+        turns = conv.to_turns_dict_list()
+
+        fc_data = turns[0]["function_calls"][0]
+        assert fc_data["attributes"]["tool.function_name"] == "get_weather"
+        assert fc_data["attributes"]["tool.call_id"] == "call_123"
+        assert fc_data["attributes"]["tool.arguments"] == '{"city": "SF"}'
+        assert fc_data["attributes"]["tool.result"] == '{"temp": 72}'
+        assert fc_data["attributes"]["tool.result_status"] == "success"
+
+    def test_multiple_function_calls_ordered_chronologically(self):
+        turn = _span(
+            "turn",
+            "turn1",
+            1000,
+            parent_id="conv1",
+            attributes=[_attr("turn.number", 1)],
+        )
+        fc2 = _fc_span(
+            "fc2",
+            5000,
+            6000,
+            parent_id="turn1",
+            attributes=[_attr("tool.function_name", "second_fn")],
+        )
+        fc1 = _fc_span(
+            "fc1",
+            2000,
+            3000,
+            parent_id="turn1",
+            attributes=[_attr("tool.function_name", "first_fn")],
+        )
+        tts = _span(
+            "tts", "tts1", 7000, parent_id="turn1", attributes=[_attr("text", "done")]
+        )
+
+        conv = Conversation([turn, fc2, fc1, tts])
+        turns = conv.to_turns_dict_list()
+
+        fcs = turns[0]["function_calls"]
+        assert len(fcs) == 2
+        assert fcs[0]["name"] == "first_fn"
+        assert fcs[1]["name"] == "second_fn"
+
+    def test_turn_without_function_calls_has_no_key(self):
+        turn = _span(
+            "turn",
+            "turn1",
+            1000,
+            parent_id="conv1",
+            attributes=[_attr("turn.number", 1)],
+        )
+        stt = _span(
+            "stt",
+            "stt1",
+            1000,
+            parent_id="turn1",
+            attributes=[_attr("transcript", "hi")],
+        )
+        tts = _span(
+            "tts", "tts1", 2000, parent_id="turn1", attributes=[_attr("text", "hello")]
+        )
+
+        conv = Conversation([turn, stt, tts])
+        turns = conv.to_turns_dict_list()
+
+        assert "function_calls" not in turns[0]
+
+    def test_function_call_duration_calculated(self):
+        turn = _span(
+            "turn",
+            "turn1",
+            1000,
+            parent_id="conv1",
+            attributes=[_attr("turn.number", 1)],
+        )
+        fc = _fc_span(
+            "fc1",
+            2_000_000_000,
+            3_500_000_000,
+            parent_id="turn1",
+            attributes=[_attr("tool.function_name", "slow_fn")],
+        )
+        tts = _span(
+            "tts", "tts1", 4000, parent_id="turn1", attributes=[_attr("text", "done")]
+        )
+
+        conv = Conversation([turn, fc, tts])
+        turns = conv.to_turns_dict_list()
+
+        fc_data = turns[0]["function_calls"][0]
+        assert fc_data["duration_seconds"] == 1.5
