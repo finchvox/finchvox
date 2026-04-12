@@ -330,7 +330,10 @@
                             <!-- User message -->
                             <template x-if="item.type === 'message' && item.data.role === 'user'">
                                 <div>
-                                    <div class="text-xs font-semibold uppercase tracking-wide text-[#f97316] mb-1">User</div>
+                                    <div class="text-xs font-semibold uppercase tracking-wide text-[#f97316] mb-1">
+                                        <span>User</span>
+                                        <span class="text-white/30 font-mono font-normal ml-2" x-text="formatEventTime(item.data.timestamp)"></span>
+                                    </div>
                                     <div class="bg-white/10 rounded-2xl px-4 py-3 cursor-pointer"
                                                                                   @click="seekToMessage(item.data)"
                                          @mouseenter="seekToMessage(item.data)"
@@ -344,7 +347,10 @@
                             <template x-if="item.type === 'message' && item.data.role === 'assistant'">
                                 <div>
                                     <div class="text-xs font-semibold uppercase tracking-wide text-[#a855f7] mb-1"
-                                         :class="item.side === 'right' ? 'text-right' : ''">Agent</div>
+                                         :class="item.side === 'right' ? 'text-right' : ''">
+                                        <span class="text-white/30 font-mono font-normal mr-2" x-text="formatEventTime(item.data.timestamp)"></span>
+                                        <span>Agent</span>
+                                    </div>
                                     <div class="bg-purple-900/40 rounded-2xl px-4 py-3 cursor-pointer"
                                                                                   @click="seekToMessage(item.data)"
                                          @mouseenter="seekToMessage(item.data)"
