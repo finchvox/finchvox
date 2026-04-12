@@ -480,6 +480,15 @@ class Conversation:
                 ) / 1_000_000_000
 
             if role == acc.role:
+                if gap_seconds is not None and gap_seconds >= 1.0:
+                    if acc.chunks and acc_tts_spans:
+                        self._refine_chunk_statuses(acc.chunks, acc_tts_spans)
+                        self._split_chunks_with_ground_truth(acc.chunks, acc_tts_spans)
+                    self._flush_accumulator(acc, messages, check_interruption)
+                    acc.reset(role, text, span, heard_status)
+                    acc_tts_spans = [span]
+                    prev_tts_end = int(span.get("end_time_unix_nano", 0))
+                    continue
                 acc.append(text, span, heard_status, gap_seconds)
                 if span.get("name") == "tts":
                     acc_tts_spans.append(span)

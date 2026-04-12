@@ -128,6 +128,48 @@ class TestTurnLatencyInConversation:
         assistant_msg = messages[1]
         assert assistant_msg.end_timestamp == 8000
 
+    def test_tts_spans_split_on_large_gap(self):
+        turn = _span(
+            "turn",
+            "turn1",
+            1000,
+            parent_id="conv1",
+            attributes=[_attr("turn.was_interrupted", False)],
+        )
+        stt = _span(
+            "stt",
+            "stt1",
+            1000,
+            parent_id="turn1",
+            attributes=[_attr("transcript", "order coffee")],
+        )
+        tts1 = {
+            "name": "tts",
+            "span_id_hex": "tts1",
+            "start_time_unix_nano": "3000000000",
+            "end_time_unix_nano": "3001000000",
+            "parent_span_id_hex": "turn1",
+            "attributes": [_attr("text", "One sec.")],
+        }
+        tts2 = {
+            "name": "tts",
+            "span_id_hex": "tts2",
+            "start_time_unix_nano": "5000000000",
+            "end_time_unix_nano": "5001000000",
+            "parent_span_id_hex": "turn1",
+            "attributes": [_attr("text", "Got it.")],
+        }
+
+        conv = Conversation([turn, stt, tts1, tts2])
+        messages = conv.get_messages()
+
+        assert len(messages) == 3
+        assert messages[0].role == "user"
+        assert messages[1].role == "assistant"
+        assert messages[1].content == "One sec."
+        assert messages[2].role == "assistant"
+        assert messages[2].content == "Got it."
+
     def test_latency_dict_omits_none_values(self):
         latency = TurnLatency(llm_ttfb=0.5, tts_ttfb=0.02)
         d = latency.to_dict()
