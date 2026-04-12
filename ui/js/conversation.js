@@ -60,8 +60,12 @@ function conversationViewMixin() {
                     });
                 }
 
-                // TODO: position latency blocks in the timeline
-                // For now, latency is omitted to avoid overlap issues
+                if (turn.latency) {
+                    const agentItem = items.find(i => i.type === 'message' && i.data.role === 'assistant' && turn.messages.includes(i.data));
+                    if (agentItem) {
+                        agentItem.latency = turn.latency;
+                    }
+                }
             }
 
             items.sort((a, b) => a.startNs - b.startNs);
@@ -102,11 +106,10 @@ function conversationViewMixin() {
                     if (item.data.attributes) {
                         for (const [k, v] of Object.entries(item.data.attributes)) {
                             const lineLen = k.length + String(v).length + 2;
-                            attrLines += Math.ceil(lineLen / 25);
+                            attrLines += Math.ceil(lineLen / 40);
                         }
                     }
-                    const estimatedHeight = attrLines * 18 + 24;
-                    item.height = Math.max(durationHeight, estimatedHeight) + LABEL_HEIGHT + PADDING;
+                    item.height = attrLines * 16 + LABEL_HEIGHT + PADDING;
                 } else {
                     item.height = MIN_EVENT_HEIGHT;
                 }

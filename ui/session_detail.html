@@ -350,6 +350,16 @@
                                          :class="item.side === 'right' ? 'text-right' : ''">
                                         <span class="text-white/30 font-mono font-normal mr-2" x-text="formatEventTime(item.data.timestamp)"></span>
                                         <span>Agent</span>
+                                        <template x-if="item.latency && item.latency.user_bot_latency_seconds != null">
+                                            <span class="relative ml-2 group">
+                                                <span class="text-white/30 font-mono font-normal cursor-help" x-text="'· ' + (item.latency.user_bot_latency_seconds * 1000).toFixed(0) + 'ms latency'"></span>
+                                                <div class="absolute right-0 top-5 bg-[#1a1a1a] border border-white/10 rounded-lg px-3 py-2 z-50 hidden group-hover:block min-w-[200px] shadow-lg">
+                                                    <template x-for="(metric, mi) in getLatencyMetrics(item.latency)" :key="mi">
+                                                        <div class="text-xs text-white/50 font-mono whitespace-nowrap" x-text="metric.label + ': ' + metric.value"></div>
+                                                    </template>
+                                                </div>
+                                            </span>
+                                        </template>
                                     </div>
                                     <div class="bg-purple-900/40 rounded-2xl px-4 py-3 cursor-pointer"
                                                                                   @click="seekToMessage(item.data)"
@@ -371,7 +381,10 @@
                             <!-- Function call -->
                             <template x-if="item.type === 'function_call'">
                                 <div>
-                                    <div class="text-xs font-semibold uppercase tracking-wide text-[#06b6d4] mb-1">Function Call</div>
+                                    <div class="text-xs font-semibold uppercase tracking-wide text-[#06b6d4] mb-1">
+                                        <span class="text-white/30 font-mono font-normal mr-2" x-text="formatEventTime(item.data.start_time_unix_nano)"></span>
+                                        <span>Function Call</span>
+                                    </div>
                                     <div class="border border-cyan-500/30 bg-cyan-900/10 rounded-lg px-4 py-3"
                                          :style="'min-height: ' + item.height + 'px;'">
                                         <div class="text-xs text-white/60 font-mono font-semibold mb-1" x-text="item.data.name"></div>
@@ -383,14 +396,6 @@
                                 </div>
                             </template>
 
-                            <!-- Latency block -->
-                            <template x-if="item.type === 'latency'">
-                                <div>
-                                    <template x-for="(metric, mi) in getLatencyMetrics(item.data)" :key="mi">
-                                        <div class="text-xs text-white/40 font-mono text-right" x-text="metric.label + ': ' + metric.value"></div>
-                                    </template>
-                                </div>
-                            </template>
                         </div>
                     </template>
                 </div>
