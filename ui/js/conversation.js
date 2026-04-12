@@ -96,7 +96,7 @@ function conversationViewMixin() {
                 if (item.type === 'message') {
                     const textLen = item.data.content ? item.data.content.length : 0;
                     const estimatedTextHeight = Math.ceil(textLen / 30) * 20 + 24;
-                    item.height = Math.max(durationHeight, MIN_BUBBLE_HEIGHT, estimatedTextHeight) + LABEL_HEIGHT + PADDING;
+                    item.height = estimatedTextHeight + LABEL_HEIGHT + PADDING;
                 } else if (item.type === 'function_call') {
                     let attrLines = 2;
                     if (item.data.attributes) {

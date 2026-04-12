@@ -332,8 +332,7 @@
                                 <div>
                                     <div class="text-xs font-semibold uppercase tracking-wide text-[#f97316] mb-1">User</div>
                                     <div class="bg-white/10 rounded-2xl px-4 py-3 cursor-pointer"
-                                         :style="'min-height: ' + item.height + 'px;'"
-                                         @click="seekToMessage(item.data)"
+                                                                                  @click="seekToMessage(item.data)"
                                          @mouseenter="seekToMessage(item.data)"
                                          @mouseleave="hideConversationMarker()">
                                         <span class="text-sm text-white" x-text="item.data.content"></span>
@@ -347,8 +346,7 @@
                                     <div class="text-xs font-semibold uppercase tracking-wide text-[#a855f7] mb-1"
                                          :class="item.side === 'right' ? 'text-right' : ''">Agent</div>
                                     <div class="bg-purple-900/40 rounded-2xl px-4 py-3 cursor-pointer"
-                                         :style="'min-height: ' + item.height + 'px;'"
-                                         @click="seekToMessage(item.data)"
+                                                                                  @click="seekToMessage(item.data)"
                                          @mouseenter="seekToMessage(item.data)"
                                          @mouseleave="hideConversationMarker()">
                                         <span x-show="!item.data.chunks" class="text-sm text-white" x-text="item.data.content"></span>
