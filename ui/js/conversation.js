@@ -3,8 +3,7 @@ function conversationViewMixin() {
         conversationTurns: [],
         conversationLoading: false,
         conversationError: null,
-        timelineItems: [],
-        timelineHeight: 0,
+        timelineTurns: [],
 
         async fetchConversation() {
             this.conversationLoading = true;
@@ -26,16 +25,16 @@ function conversationViewMixin() {
         },
 
         buildTimeline() {
-            const items = [];
+            this.timelineTurns = this.conversationTurns.map(turn => {
+                const items = [];
 
-            for (const turn of this.conversationTurns) {
                 for (const msg of (turn.messages || [])) {
                     items.push({
                         type: 'message',
                         side: msg.role === 'user' ? 'left' : 'right',
                         data: msg,
-                        startNs: Number(msg.timestamp),
-                        endNs: Number(msg.end_timestamp || msg.timestamp),
+                        timestamp: Number(msg.timestamp),
+                        latency: null,
                     });
                 }
 
@@ -44,101 +43,33 @@ function conversationViewMixin() {
                         type: 'function_call',
                         side: 'right',
                         data: fc,
-                        startNs: Number(fc.start_time_unix_nano),
-                        endNs: Number(fc.end_time_unix_nano),
+                        timestamp: Number(fc.start_time_unix_nano),
                     });
                 }
 
                 for (const evt of (turn.events || [])) {
-                    const side = this.isUserEvent(evt) ? 'left' : 'right';
                     items.push({
                         type: 'event',
-                        side,
+                        side: this.isUserEvent(evt) ? 'left' : 'right',
                         data: evt,
-                        startNs: Number(evt.time_unix_nano),
-                        endNs: Number(evt.time_unix_nano),
+                        timestamp: Number(evt.time_unix_nano),
                     });
                 }
 
+                items.sort((a, b) => a.timestamp - b.timestamp);
+
                 if (turn.latency) {
-                    const agentItem = items.find(i => i.type === 'message' && i.data.role === 'assistant' && turn.messages.includes(i.data));
-                    if (agentItem) {
-                        agentItem.latency = turn.latency;
-                    }
-                }
-            }
-
-            items.sort((a, b) => a.startNs - b.startNs);
-
-            if (items.length === 0) {
-                this.timelineItems = [];
-                this.timelineHeight = 0;
-                return;
-            }
-
-            const originNs = items[0].startNs;
-            const BASE_HEIGHT = 100;
-            const REF_SEC = 0.3;
-            const MIN_BUBBLE_HEIGHT = 60;
-            const MIN_EVENT_HEIGHT = 22;
-            const ITEM_GAP = 4;
-
-            const nsToY = (ns) => {
-                const deltaSec = (ns - originNs) / 1_000_000_000;
-                if (deltaSec <= 0) return 0;
-                return BASE_HEIGHT * Math.log2(1 + deltaSec / REF_SEC);
-            };
-
-            const LABEL_HEIGHT = 24;
-            const PADDING = 16;
-
-            for (const item of items) {
-                item.rawY = nsToY(item.startNs);
-                const endY = nsToY(item.endNs);
-                const durationHeight = endY - item.rawY;
-
-                if (item.type === 'message') {
-                    const textLen = item.data.content ? item.data.content.length : 0;
-                    const estimatedTextHeight = Math.ceil(textLen / 30) * 20 + 24;
-                    item.height = estimatedTextHeight + LABEL_HEIGHT + PADDING;
-                } else if (item.type === 'function_call') {
-                    let attrLines = 2;
-                    if (item.data.attributes) {
-                        for (const [k, v] of Object.entries(item.data.attributes)) {
-                            const lineLen = k.length + String(v).length + 2;
-                            attrLines += Math.ceil(lineLen / 40);
-                        }
-                    }
-                    item.height = attrLines * 16 + LABEL_HEIGHT + PADDING;
-                } else {
-                    item.height = MIN_EVENT_HEIGHT;
-                }
-            }
-
-            const leftTrack = [];
-            const rightTrack = [];
-            let maxY = 0;
-
-            for (const item of items) {
-                const track = item.side === 'left' ? leftTrack : rightTrack;
-                let y = item.rawY;
-
-                for (const prev of track) {
-                    const prevBottom = prev.y + prev.height + ITEM_GAP;
-                    if (y < prevBottom) {
-                        y = prevBottom;
+                    const agentMsg = items.find(i => i.type === 'message' && i.data.role === 'assistant');
+                    if (agentMsg) {
+                        agentMsg.latency = turn.latency;
                     }
                 }
 
-                item.y = y;
-                track.push(item);
-
-                const itemBottom = item.y + item.height;
-                if (itemBottom > maxY) maxY = itemBottom;
-            }
-
-            this.timelineItems = items;
-            this.timelineHeight = maxY + 40;
+                return {
+                    turnNumber: turn.turn_number,
+                    items,
+                };
+            });
         },
 
         formatEventTime(timeUnixNano) {

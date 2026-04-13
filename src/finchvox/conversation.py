@@ -125,6 +125,8 @@ class MessageAccumulator:
 class Turn:
     turn_number: int
     messages: list[Message]
+    start_timestamp: int = 0
+    end_timestamp: int = 0
     latency: TurnLatency | None = None
     events: list[dict] | None = None
     user_bot_latency_seconds: float | None = None
@@ -134,6 +136,8 @@ class Turn:
         d = {
             "turn_number": self.turn_number,
             "messages": [m.to_dict() for m in self.messages],
+            "start_timestamp": self.start_timestamp,
+            "end_timestamp": self.end_timestamp,
         }
         if self.latency and self.latency.has_data():
             d["latency"] = self.latency.to_dict()
@@ -683,6 +687,8 @@ class Conversation:
                 Turn(
                     turn_number=turn_number,
                     messages=turn_messages,
+                    start_timestamp=int(turn.get("start_time_unix_nano", 0)),
+                    end_timestamp=int(turn.get("end_time_unix_nano", 0)),
                     latency=latency,
                     events=events or None,
                     user_bot_latency_seconds=user_bot,
