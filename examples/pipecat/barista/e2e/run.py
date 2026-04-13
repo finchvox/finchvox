@@ -22,6 +22,8 @@ from customer import run_customer
 
 load_dotenv(override=True)
 
+logger.disable("pipecat.processors.frameworks.rtvi")
+
 finchvox.init(service_name="pipecat-e2e")
 
 E2E_TIMEOUT = int(os.getenv("E2E_TIMEOUT", "120"))
