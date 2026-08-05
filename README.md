@@ -1,13 +1,11 @@
-# <img src="ui/images/finchvox-logo.png" height=24 /> Finchvox - Voice AI Observability, Elevated.
+# <img src="ui/images/finchvox-logo.png" alt="Finchvox" height=24 /> Finchvox - Voice AI Observability, Elevated.
 
-Meet Finchvox, local session replay purpose-built for Voice AI apps.
+Finchvox is open-source observability for **Pipecat** voice agents: local session replay that unifies conversation audio, **OpenTelemetry** traces, logs, and metrics in a single UI. Finchvox surfaces voice-specific failures like interruptions and high user ↔ bot latency that generic otel tools do not.
 
-Finchvox unifies conversation audio, logs, traces, and metrics in a single UI, highlighting voice-specific problems like interruptions and high user <-> bot latency. Finchvox is currently designed for local, development usage.
-
-Visit [Finchvox.dev](https://finchvox.dev) to signup for the production-ready self-hosted option.
+Finchvox is currently designed for local, development usage. Visit [Finchvox.dev](https://finchvox.dev) to sign up for the production-ready self-hosted option.
 
 _👇 Click the image for a short video:_
-<a href="https://github.com/user-attachments/assets/f093e764-82ae-41cb-9089-4e2d19c7867f" target="_blank"><img src="./docs/screenshot.png" /></a>
+<a href="https://github.com/user-attachments/assets/f093e764-82ae-41cb-9089-4e2d19c7867f" target="_blank"><img src="./docs/screenshot.png" alt="Finchvox session replay UI showing conversation audio, traces, and latency metrics" /></a>
 
 ## Table of Contents
 
