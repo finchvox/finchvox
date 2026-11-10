@@ -1,12 +1,18 @@
 import pytest
-from unittest.mock import Mock, AsyncMock
+
+# Pipecat is an optional Finchvox integration. Skip this module cleanly for
+# LiveKit-only development installs instead of failing test collection.
+pytest.importorskip("pipecat")
+
 from io import StringIO
+from unittest.mock import AsyncMock, Mock
+
+from loguru import logger
+from pipecat.frames.frames import EndFrame, StartFrame
+from pipecat.processors.frame_processor import FrameDirection
 
 import finchvox
 from finchvox import FinchvoxProcessor
-from pipecat.frames.frames import StartFrame, EndFrame
-from pipecat.processors.frame_processor import FrameDirection
-from loguru import logger
 
 
 @pytest.fixture
@@ -18,7 +24,7 @@ def reset_finchvox_state():
 
 @pytest.fixture
 def mock_setup_info():
-    def close_coro_and_return_mock(coro, name=None):
+    def close_coro_and_return_mock(coro, name=None, context=None):
         coro.close()
         return AsyncMock()
 
@@ -29,6 +35,8 @@ def mock_setup_info():
     setup.task_manager.create_task = Mock(side_effect=close_coro_and_return_mock)
     setup.task_manager.cancel_task = AsyncMock()
     setup.observer = None
+    setup.enable_tracing = True
+    setup.tracing_context = None
     return setup
 
 
@@ -56,7 +64,7 @@ async def test_pipeline_continues_when_init_not_called(
 
     processor.push_frame = capture_push
 
-    start_frame = StartFrame(enable_tracing=True)
+    start_frame = StartFrame()
     await processor.process_frame(start_frame, FrameDirection.DOWNSTREAM)
 
     assert len(pushed_frames) == 1
@@ -72,6 +80,7 @@ async def test_pipeline_continues_when_tracing_disabled(
     reset_finchvox_state, mock_setup_info, capture_logs
 ):
     finchvox._initialized = True
+    mock_setup_info.enable_tracing = False
 
     processor = FinchvoxProcessor()
     await processor.setup(mock_setup_info)
@@ -83,7 +92,7 @@ async def test_pipeline_continues_when_tracing_disabled(
 
     processor.push_frame = capture_push
 
-    start_frame = StartFrame(enable_tracing=False)
+    start_frame = StartFrame()
     await processor.process_frame(start_frame, FrameDirection.DOWNSTREAM)
 
     assert len(pushed_frames) == 1
@@ -110,7 +119,7 @@ async def test_pipeline_continues_when_collector_unreachable(
 
     processor.push_frame = capture_push
 
-    start_frame = StartFrame(enable_tracing=True)
+    start_frame = StartFrame()
     await processor.process_frame(start_frame, FrameDirection.DOWNSTREAM)
 
     assert len(pushed_frames) == 1
@@ -160,7 +169,7 @@ async def test_end_frame_flows_through_when_disabled(
 
     processor.push_frame = capture_push
 
-    start_frame = StartFrame(enable_tracing=True)
+    start_frame = StartFrame()
     await processor.process_frame(start_frame, FrameDirection.DOWNSTREAM)
 
     end_frame = EndFrame()

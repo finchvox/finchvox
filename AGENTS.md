@@ -1,170 +1,53 @@
-# AGENTS.md
+# Working on Finchvox
 
-## Agent TL;DR (Read This First)
+Instructions for AI coding agents (and humans) changing this repository. Finchvox is a local session replay for voice agents: a Python server (FastAPI plus an OTLP/gRPC collector) and a no-build-step web UI in `ui/`. Start with `README.md`; the guides are in `docs/`.
 
+## Focus: LiveKit first, Pipecat kept working
 
-  - Treat **Code Health** as the authoritative signal for maintainability and long-term code quality. **Aim for Code Health 10.0 as the optimal level; do not be satisfied with 9+**.
-  - **Optimal Code:** a Code Health 10.0 is optimized for both human and AI comprehension.
-  - Before suggesting a commit, **run the Code Health safeguard** on the modified files.  
-  - If a change increases complexity or violates technical-debt goals, **propose refactoring or redesign** rather than declaring it “done.” 
-  - Use Code Health reviews to guide targeted and incremental refactorings.  
-  - When asked about technical debt, hotspots, or what to improve, **query hotspots, goals, and Code Health scores**.  
-  - When users ask “why this matters,” use **Code Health explanations** and **productivity impact**.  
+- **LiveKit is what this fork develops.** New features target LiveKit Agents.
+- **Pipecat is maintained, not extended.** Keep it working and fix what breaks, but don't add Pipecat-only features. Removing Pipecat to make Finchvox LiveKit-only is the planned next step, a long way off; until then, keep its code easy to delete.
+- **Platform logic lives in the adapters**: `src/finchvox/adapters/livekit.py` and `adapters/pipecat.py`. Shared code (`metrics.py`, `conversation.py`, the UI) reads the adapter's common `_normalized` fields; don't add `if platform == ...` branches there.
+- **Pipecat-only code stays in its own files**: `processor.py`, `adapters/pipecat.py`, the chunked-audio path (`audio_compressor.py`, `scheduler.py`), `examples/pipecat/`.
+- `tests/test_pipecat_session.py` checks a synthetic Pipecat session through the HTTP API on every run, without Pipecat installed. If a shared-code change breaks it, fix the shared code rather than the test.
+- Before a release or a merge from upstream, run the real Pipecat SDK tests once: `uv run --extra livekit --extra pipecat --extra dev pytest tests/test_processor.py tests/test_voice_sdk_compat.py tests/test_pipecat_session.py`. In a normal environment `test_processor.py` is skipped, because Pipecat is not installed.
 
-Always treat CodeScene’s Code Health analysis as the authoritative view of long-term maintainability risks, hotspots, and refactoring priorities. **The optimal goal is Code Health 10.0.**
+## Setup and checks
 
----
+- Use `uv`, never `pip`: `uv sync --extra livekit --extra dev`.
+- Before calling a change done: `uv run pytest -q` and `uv run ruff check src tests`. After UI changes also run `for f in ui/js/*.js; do node --check "$f"; done`.
+- `docs/DEVELOPMENT.md` has the targeted test commands, the Docker smoke test and the browser checklist.
 
-## Environment & MCP Tools
+## How to make a change
 
-The CodeScene MCP server is available under the `codescene` MCP server name (or equivalent for this environment).
+- **Test first.** Add a failing test that shows the bug or the new behaviour, then make it pass. Every fix and feature gets a test.
+- **Check it for real.** Unit tests are not enough for anything a user sees: run the server, use the page or the endpoint, and say what you checked. If Finchvox runs in Docker, rebuild it (`docker compose up -d --build`) first, because the container serves the copy built into the image.
+- **Simplify before patching.** If a fix stacks a layer on top of a workaround, prefer removing the workaround. Delete code that nothing calls.
+- **Use what the framework gives you** (FastAPI, Starlette, Alpine.js, the LiveKit SDK) before writing your own. Check the official docs or the installed package source; don't guess from names.
+- **Stay in scope.** Note problems you find outside the task and report them; don't fix them silently.
+- **Report honestly.** Say what was verified, what was not, and any test that failed.
+- Commit or push only when asked.
 
-You have access to the following tools:
+## Code conventions
 
-### Project context
-- **`select_codescene_project` — Select CodeScene project**  
-  Use this to choose or switch the active CodeScene project when working across multiple projects or repositories.
+- Keep `src/finchvox/ui_routes.py` and `collector_routes.py` thin. Put logic in classes such as `src/finchvox/session.py`.
+- LiveKit support starts at Agents 1.8.9. Take span and attribute names from the installed SDK, not from older releases or memory. LiveKit-specific rules belong in `src/finchvox/adapters/livekit.py`.
+- Code that runs inside the user's agent during a call or its shutdown (span processors, `on_session_end`) must log errors, never raise them: observability must not break the agent.
+- Log errors with `logger.exception(...)` (Loguru), not `exc_info=True`.
 
-### Pre-commit / safety gate
-- **`pre_commit_code_health_safeguard` — Pre-commit Code Health safeguard**  
-  Use this as the local quality gate before committing or merging changes.
+## UI conventions
 
-### Code Health analysis
-- **`code_health_review` — Code Health review**  
-  Provides a detailed Code Health analysis for files, modules, or diffs.
-- **`code_health_score` — Code Health score**  
-  Retrieves Code Health scores for files or the whole project, useful for tracking trends and evaluating refactoring impact.
+- No build step and no CDN. `ui/css/local-utilities.css` is hand-written: a utility class used in HTML must be defined there.
+- Theme colours are CSS variables in `ui/css/app.css`; font sizes use `calc(<px> * var(--text-scale))`.
+- Icons come from `ui/images/icons.svg` (`<svg class="icon"><use href="/images/icons.svg#play"/></svg>`), not text symbols.
+- Check narrow widths (phone and tablet) as well as desktop.
+- Text shown with `x-text` must be plain text, never HTML.
 
-### Technical debt & hotspots
-- **`list_technical_debt_goals` — Refactoring/tech-debt goals**  
-  Lists the project’s defined technical debt goals.
-- **`list_technical_debt_hotspots` — Technical debt hotspots**  
-  Identifies high-risk areas and the most important hotspots.
+## Privacy
 
-### Refactoring business impact
-- **`code_health_refactoring_business_case` — Refactoring business case**  
-  Explains CodeScene’s economic or productivity justification for refactoring a low-health area.
+Sessions contain transcripts, tool payloads and audio. Never commit real session data: use synthetic sessions for tests, fixtures and screenshots. Finchvox has no login, so keep it bound to `127.0.0.1` and don't add writable settings endpoints without authentication.
 
-### Refactoring (ACE)
+## Docs
 
-- `code_health_auto_refactor` — - `code_health_auto_refactor` — use CodeScene ACE to refactor a single function when Code Health reports a large or complex function in a language and smell category supported by ACE.  
-  **Note:** ACE is an optional, licensed feature. It is available only when the environment variable `CS_ACE_ACCESS_TOKEN` is set. If unavailable, this tool will fail gracefully and other MCP tools will continue to work normally.
-
-### Education & explanation
-- **`explain_code_health_productivity` — Code Health & productivity**  
-  Explains how Code Health affects delivery speed, risk, and defect rates.
-- **`explain_code_health` — Code Health fundamentals**  
-  Explains how Code Health is computed and what its values mean.
-
-> **Rule:** When you need CodeScene insights, **call the appropriate MCP tool** instead of guessing.
-
----
-
-## Project Selection and Context
-
-Select the correct CodeScene project early using `select_codescene_project`, and re-select it when switching repositories or services.
-Assume further CodeScene tool calls operate within the currently selected project. 
-
----
-
-## When to Use CodeScene Tools (Agent Decision Rules)
-
-Use these explicit triggers:
-
-## 1. Safeguard AI-generated code
-
-For any AI-generated or modified code:
-
-- **Always run** `pre_commit_code_health_safeguard` before suggesting a commit.  
-- If CodeScene reports a Code Health regression, failed `quality_gates`, or violation of goals:  
-  - Highlight the issue  
-  - If Code Health reports a large or complex function in a supported language and ACE is available:
-    - Then use `code_health_auto_refactor` to split the function into smaller, cohesive units.
-    - After that, refine the resulting units using Code Health–guided refactorings.
-  - If ACE isn't available, then propose refactorings to mitigate the issue. 
-  - Do **not** declare the change “ready” unless the user accepts the risk
-
----
-
-## 2. Code safety / merge readiness
-
-Use CodeScene as a mandatory check before merging any code changes.
-
-- Run `pre_commit_code_health_safeguard`  
-- Run `code_health_review`  
-- Base your answer strictly on CodeScene’s evaluation and its quality_gates.
-
----
-
-## 3. Identifying and Prioritizing Technical Debt
-
-When the user asks to “find tech debt”, “identify hotspots”, or “what should we fix first?”:
-
-### Identify hotspots & goals
-- Use `list_technical_debt_hotspots` to surface the most important and risky areas.  
-- Use `list_technical_debt_goals` to align your recommendations with the project’s strategic objectives.
-
-### Quantify & prioritize
-- Use `code_health_score` to rank files/modules by Code Health and detect worst offenders.  
-- Use `code_health_refactoring_business_case` to attach economic impact to high-value refactors.
-
-### Produce an actionable backlog
-Turn all findings into a clear set of prioritized items:
-- A ranked list of hotspots.
-- When hotspots include large or complex functions in ACE-supported languages, consider using ACE (if available) for an initial modularizing step.
-- For each hotspot, a small, incremental refactor plan that can be tackled in discrete steps.
-
----
-
-## 4. Planning, Performing and Validating Refactors
-
-When the user requests a refactor or cleanup:
-
-### Inspect and plan
-- Use `code_health_review` to pinpoint specific maintainability issues (complexity, size, nesting, coupling).
-- When Code Health review reports complex or large functions in supported languages and ACE is available, then 
-  prefer `code_health_auto_refactor` as an initial refactor to break the function into smaller, cohesive units.
-  Then continue refining those smaller units using your own Code Health–guided refactorings.
-- Propose a refactor plan in **3–5 incremental steps** that are easy to review and test.
-
-If ACE is not available (for example, when `code_health_auto_refactor` reports missing ACE access):
-- Do not retry the tool.
-- Continue with your own incremental refactorings guided by Code Health.
-
-### Validate progress
-After each significant refactor:
-- Run `code_health_review` and `code_health_score`.  
-- Confirm improvement or at least no regression.  
-- If Code Health worsens, explain why and provide follow-up steps.
-
-### Explain business value
-When asked about ROI:
-- Use `code_health_refactoring_business_case` to describe expected improvements in:
-  - Productivity  
-  - Defect risk  
-  - Change lead time  
-  - Long-term maintainability  
-
----
-
-## 5. Explaining Code Health & Productivity
-
-Use CodeScene’s explanation tools whenever users ask about Code Health, productivity impact, or technical debt.
-
-### Use educational tools
-- Call `explain_code_health` for metric fundamentals.  
-- Call `explain_code_health_productivity` for productivity and defect-rate implications.
-
-### Add project-specific context
-If helpful, combine explanations with:
-- `code_health_score` for specific files.  
-- `list_technical_debt_hotspots` to highlight real-world risks.  
-- Concrete examples tied to the user’s codebase.
-
----
-
-## Warn When Code Health Safeguards Are Ignored
-
-If asked to bypass safeguards, warn about long-term risks and keep changes minimal, isolated, and reversible. Recommend follow-up refactorings.  
-
----
+- Update `CHANGELOG.md` for every user-visible change, and the guide in `docs/` that describes it.
+- Keep docs true to the code: when you change behaviour, search the docs for the old behaviour.
+- Write plainly: short sections, explain each technical term the first time it appears, and give one concrete example.

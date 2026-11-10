@@ -3,7 +3,9 @@ function metricsViewMixin() {
         metricsData: null,
         metricsLoading: false,
         metricsError: null,
-        metricsCharts: {},
+        // A frozen holder keeps mutable Chart instances outside Alpine's proxies.
+        metricsCharts: Object.freeze({}),
+        metricsEvents: null,
 
         async fetchMetrics() {
             if (this.metricsData) return;
@@ -43,6 +45,7 @@ function metricsViewMixin() {
             if (!this.metricsData || !this.metricsData.services) return;
 
             this.destroyMetricsCharts();
+            this.metricsEvents = new AbortController();
 
             for (const service of this.metricsData.services) {
                 const canvas = document.getElementById(`ttfb-chart-${service}`);
@@ -51,11 +54,13 @@ function metricsViewMixin() {
                 const seriesData = this.metricsData.series[service];
                 if (!seriesData || !seriesData.data_points.length) continue;
 
-                canvas.addEventListener('mouseleave', () => this.hideMarkerFromMetrics());
-                this.metricsCharts[service] = new Chart(
+                canvas.addEventListener('mouseleave', () => this.hideMarkerFromMetrics(),
+                    { signal: this.metricsEvents.signal });
+                const chart = new Chart(
                     canvas.getContext('2d'),
                     this.createChartConfig(service, seriesData)
                 );
+                this.metricsCharts = Object.freeze({ ...this.metricsCharts, [service]: chart });
             }
 
             this.initUserBotLatencyChart();
@@ -68,11 +73,14 @@ function metricsViewMixin() {
             const canvas = document.getElementById('user-bot-latency-chart');
             if (!canvas) return;
 
-            canvas.addEventListener('mouseleave', () => this.hideMarkerFromMetrics());
-            this.metricsCharts['user_bot_latency'] = new Chart(
+            this.metricsEvents ??= new AbortController();
+            canvas.addEventListener('mouseleave', () => this.hideMarkerFromMetrics(),
+                { signal: this.metricsEvents.signal });
+            const chart = new Chart(
                 canvas.getContext('2d'),
                 this.createLatencyChartConfig(latencyData)
             );
+            this.metricsCharts = Object.freeze({ ...this.metricsCharts, user_bot_latency: chart });
         },
 
         createChartConfig(service, seriesData) {
@@ -148,7 +156,7 @@ function metricsViewMixin() {
                 title: { display: false },
                 ticks: {
                     color: 'rgba(255, 255, 255, 0.5)',
-                    font: { size: 10, family: 'monospace' },
+                    font: { size: 12 * window.FinchvoxPreferences.textScale(), family: 'monospace' },
                     callback: (value) => this.formatMetricsTime(value)
                 },
                 grid: { color: 'rgba(255, 255, 255, 0.05)' }
@@ -161,11 +169,11 @@ function metricsViewMixin() {
                     display: true,
                     text: 'Time (ms)',
                     color: 'rgba(255, 255, 255, 0.5)',
-                    font: { size: 12 }
+                    font: { size: 14 * window.FinchvoxPreferences.textScale() }
                 },
                 ticks: {
                     color: 'rgba(255, 255, 255, 0.5)',
-                    font: { size: 12, family: 'monospace' }
+                    font: { size: 14 * window.FinchvoxPreferences.textScale(), family: 'monospace' }
                 },
                 grid: { color: 'rgba(255, 255, 255, 0.05)' },
                 beginAtZero: true
@@ -209,17 +217,16 @@ function metricsViewMixin() {
             }
         },
 
+        // Chart colours come from the theme (--chart-* in app.css). They must be
+        // #rrggbb, because the fill appends an alpha suffix ("33").
         getServiceColor(service) {
-            const colors = {
-                stt: '#f97316',
-                llm: '#ec4899',
-                tts: '#a855f7'
-            };
-            return colors[service] || '#6b7280';
+            const token = window.FinchvoxPreferences.cssToken;
+            const fallback = token('--chart-default', '#6b7280');
+            return ['stt', 'llm', 'tts'].includes(service) ? token(`--chart-${service}`, fallback) : fallback;
         },
 
         createLatencyChartConfig(seriesData) {
-            const color = '#10b981';
+            const color = window.FinchvoxPreferences.cssToken('--chart-latency', '#10b981');
             const dataPoints = seriesData.data_points.map(p => ({
                 x: p.relative_time_ms / 1000,
                 y: p.latency_ms,
@@ -317,15 +324,35 @@ function metricsViewMixin() {
             return this.metricsData.user_bot_latency.stats;
         },
 
+        selectMetricsSpan(spanId) {
+            const span = this.spans.find(s => s.span_id_hex === spanId);
+            if (span) this.selectSpan(span, true);
+        },
+
+        getWorstEventLoopBlockMs() {
+            const blocks = this.metricsData?.event_loop_blocks || [];
+            return blocks.reduce((worst, block) => Math.max(worst, block.duration_ms), 0);
+        },
+
+        usageAmounts(row) {
+            const seconds = new Set(['audio_duration', 'session_duration']);
+            return Object.entries(row.amounts || {}).map(([key, value]) => ({
+                label: key.replaceAll('_', ' '),
+                value: seconds.has(key) ? `${Number(value).toFixed(1)} s` : Number(value).toLocaleString()
+            }));
+        },
+
         formatMetricsTime(seconds) {
             return formatDuration(seconds * 1000, 0);
         },
 
         destroyMetricsCharts() {
+            this.metricsEvents?.abort();
+            this.metricsEvents = null;
             Object.values(this.metricsCharts).forEach(chart => {
                 if (chart) chart.destroy();
             });
-            this.metricsCharts = {};
+            this.metricsCharts = Object.freeze({});
         },
 
         getMetricsStats(service) {

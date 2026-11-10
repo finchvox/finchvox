@@ -135,6 +135,16 @@ class TestListSessionsEndpoint:
         assert response.status_code == 200
         assert response.json()["page"] == 1
 
+    def test_response_keeps_the_upload_limit_and_totals(self, client, temp_data_dir):
+        create_session_with_logs(
+            temp_data_dir, "s1", [{"name": "test-span", "start_time_unix_nano": 1}], logs=[]
+        )
+
+        data = client.get("/api/sessions").json()
+
+        assert data["max_upload_bytes"] > 0
+        assert data["totals"] == {"sessions": 1, "livekit": 0, "errors": 0}
+
 
 class TestGetLogsEndpoint:
     def test_returns_logs_for_valid_session(self, client, temp_data_dir):
@@ -247,3 +257,93 @@ class TestGetLogsEndpoint:
         assert response.status_code == 200
         data = response.json()
         assert data["trace_start_time"] == 3000000000
+
+
+class TestLiveKitSessionArtifacts:
+    def test_raw_session_includes_livekit_report(self, client, temp_data_dir):
+        session_id = "0123456789abcdef0123456789abcdef"
+        spans = [
+            {
+                "name": "agent_session",
+                "start_time_unix_nano": 1_000_000_000,
+                "end_time_unix_nano": 2_000_000_000,
+            }
+        ]
+        create_session_with_logs(temp_data_dir, session_id, spans, logs=[])
+        report = {"room_name": "room-local", "events": [{"type": "handoff"}]}
+        session_dir = temp_data_dir / "sessions" / session_id
+        (session_dir / "livekit_report.json").write_text(json.dumps(report))
+
+        response = client.get(f"/api/sessions/{session_id}/raw")
+
+        assert response.status_code == 200
+        assert response.json()["livekit_session_report"] == report
+
+    def test_audio_status_detects_livekit_mp3_recording(self, client, temp_data_dir):
+        session_id = "abcdef0123456789abcdef0123456789"
+        spans = [
+            {
+                "name": "agent_session",
+                "start_time_unix_nano": 1_000_000_000,
+                "end_time_unix_nano": 2_000_000_000,
+            }
+        ]
+        create_session_with_logs(temp_data_dir, session_id, spans, logs=[])
+        session_dir = temp_data_dir / "sessions" / session_id
+        (session_dir / "audio.mp3").write_bytes(b"local-audio")
+
+        response = client.get(f"/api/sessions/{session_id}/audio/status")
+
+        assert response.status_code == 200
+        assert response.json()["finalized"] is True
+        assert response.json()["format"] == "mp3"
+        assert response.json()["size_bytes"] == len(b"local-audio")
+
+class TestSessionListLiveKitMetadata:
+    def test_list_sessions_exposes_platform_and_error_count(self, client, temp_data_dir):
+        session_id = "99999999999999999999999999999999"
+        spans = [
+            {
+                "name": "agent_session",
+                "start_time_unix_nano": 1_000_000_000,
+                "end_time_unix_nano": 5_000_000_000,
+                "resource": {
+                    "attributes": [
+                        {"key": "service.name", "value": {"string_value": "clinic-agent"}}
+                    ]
+                },
+                "attributes": [],
+            },
+            {
+                "name": "agent_turn",
+                "start_time_unix_nano": 2_000_000_000,
+                "end_time_unix_nano": 4_000_000_000,
+                "attributes": [],
+                "status": {"code": "STATUS_CODE_ERROR", "message": "tool timed out"},
+            },
+        ]
+        create_session_with_logs(temp_data_dir, session_id, spans, logs=[])
+
+        response = client.get("/api/sessions")
+
+        assert response.status_code == 200
+        sessions = response.json()["sessions"]
+        assert len(sessions) == 1
+        assert sessions[0]["platform"] == "livekit"
+        assert sessions[0]["error_count"] == 1
+        assert sessions[0]["service_name"] == "clinic-agent"
+        assert sessions[0]["trace"]["turn_count"] == 1
+
+class TestLocalOnlyUiAssets:
+    def test_sessions_index_does_not_require_tailwind_play_cdn(self, client):
+        response = client.get("/")
+        assert response.status_code == 200
+        assert "cdn.tailwindcss.com" not in response.text
+        assert "/css/app.css" in response.text
+
+    def test_session_inspector_does_not_require_tailwind_play_cdn(self, client):
+        response = client.get("/sessions/any-session-id")
+        assert response.status_code == 200
+        assert "cdn.tailwindcss.com" not in response.text
+        assert "/css/local-utilities.css" in response.text
+        assert "/css/app.css" in response.text

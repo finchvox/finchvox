@@ -4,130 +4,130 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Sessions - Finchvox</title>
-    <script src="https://cdn.tailwindcss.com"></script>
-    <script>
-        tailwind.config = {
-            theme: {
-                extend: {
-                    colors: {
-                        'span-stt': '#f97316',
-                        'span-llm': '#ec4899',
-                        'span-tts': '#a855f7',
-                        'span-turn': '#10b981',
-                    }
-                }
-            }
-        }
-    </script>
+    <script src="/js/preferences.js"></script>
     <link rel="stylesheet" href="/css/app.css">
     <script src="/js/time-utils.js"></script>
     <script defer src="/lib/alpine.min.js"></script>
 </head>
-<body class="bg-[#050507] text-white min-h-screen flex flex-col overflow-y-auto overflow-x-hidden text-sm font-sans" x-data="sessionsListApp()" x-init="init()">
-    <div class="py-3.5 px-8 border-b border-white/10 flex items-center gap-2.5 bg-[#050507]">
-        <img src="/images/finchvox-logo.png" alt="FinchVox Logo" class="h-5 w-auto">
-        <span class="text-white/70">Sessions</span>
-    </div>
-
-    <main class="flex-1 overflow-auto px-8 pb-16">
-        <div class="flex items-center justify-between mt-6 mb-4">
-            <h1 class="text-white text-xl font-semibold" x-text="showingRangeText"></h1>
-            <button @click="showUploadSection = !showUploadSection"
-                    class="flex items-center gap-2 bg-white/5 text-white/40 border border-white/10 hover:bg-white/10 hover:text-white/60 rounded px-3 py-1.5 text-xs font-mono transition-all duration-200 cursor-pointer"
-                    :class="{ 'bg-amber-500/20 text-amber-400 border-amber-500/30': showUploadSection }">
-                <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" class="w-4 h-4">
-                    <path stroke-linecap="round" stroke-linejoin="round" d="M3 16.5v2.25A2.25 2.25 0 0 0 5.25 21h13.5A2.25 2.25 0 0 0 21 18.75V16.5m-13.5-9L12 3m0 0l4.5 4.5M12 3v13.5" />
-                </svg>
-                <span>Upload</span>
+<body class="sessions-body" x-data="sessionsListApp()">
+    <header class="sessions-header">
+        <div class="sessions-brand">
+            <img src="/images/finchvox-logo.png" alt="Finchvox" class="sessions-logo">
+            <div>
+                <div class="sessions-brand-title">Finchvox</div>
+                <div class="sessions-brand-subtitle">Local agent observability</div>
+            </div>
+        </div>
+        <div class="sessions-header-actions">
+            <span class="local-only-badge">LOCAL</span>
+            <a href="/settings" class="chrome-button" title="Settings" aria-label="Settings">
+                <svg class="icon" aria-hidden="true"><use href="/images/icons.svg#settings"/></svg>
+            </a>
+            <button type="button" class="chrome-button" @click="showUploadSection = !showUploadSection"
+                    :class="{ 'sessions-button-active': showUploadSection }">
+                <svg class="icon" aria-hidden="true"><use href="/images/icons.svg#upload"/></svg>
+                <span class="sessions-import-label">Import session</span>
             </button>
         </div>
+    </header>
 
-        <div x-show="showUploadSection" x-transition class="px-4 py-4 mb-4 border border-white/10 rounded-lg bg-white/[0.02]">
-        <form @submit.prevent="uploadSession" class="flex items-center gap-4">
-            <input type="file"
-                   accept=".zip"
-                   @change="uploadFile = $event.target.files[0]"
-                   class="text-sm text-white/70 file:mr-4 file:py-1.5 file:px-3 file:rounded file:border file:border-white/10 file:text-xs file:font-mono file:bg-white/5 file:text-white/40 hover:file:bg-white/10 hover:file:text-white/60 file:cursor-pointer file:transition-all"
-                   :disabled="uploading">
-            <button type="submit"
-                    :disabled="!uploadFile || uploading"
-                    class="flex items-center gap-2 bg-amber-500/20 text-amber-400 border border-amber-500/30 rounded px-3 py-1.5 text-xs font-mono transition-all duration-200"
-                    :class="(!uploadFile || uploading) ? 'opacity-50 cursor-not-allowed' : 'hover:bg-amber-500/30 cursor-pointer'">
-                <span x-show="!uploading">Upload Session</span>
-                <span x-show="uploading">Uploading...</span>
-            </button>
-            <span x-show="uploadError" class="text-red-400 text-xs" x-text="uploadError"></span>
-        </form>
-        </div>
+    <main class="sessions-main">
+        <section class="sessions-hero">
+            <div>
+                <div class="sessions-eyebrow">SESSIONS</div>
+                <h1>Voice agent replays</h1>
+                <p>Audio, transcript, traces, logs, tools, handoffs, and latency on one local timeline.</p>
+            </div>
+            <div class="sessions-stat-strip" x-show="totals.sessions > 0">
+                <div><span>Sessions</span><strong x-text="totals.sessions"></strong></div>
+                <div><span>LiveKit</span><strong x-text="totals.livekit"></strong></div>
+                <div><span>Errors</span><strong :class="{ 'sessions-stat-danger': totals.errors > 0 }" x-text="totals.errors"></strong></div>
+            </div>
+        </section>
 
-        <div x-show="sessions.length === 0" class="flex items-center gap-3 p-4 px-5 mt-20 mx-0 mb-4 bg-white/[0.02] border border-white/10 rounded-sm text-orange-400">
-            <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" class="w-5 h-5 shrink-0">
-                <path stroke-linecap="round" stroke-linejoin="round" d="M12 9v3.75m-9.303 3.376c-.866 1.5.217 3.374 1.948 3.374h14.71c1.73 0 2.813-1.874 1.948-3.374L13.949 3.378c-.866-1.5-3.032-1.5-3.898 0L2.697 16.126ZM12 15.75h.007v.008H12v-.008Z" />
-            </svg>
-            <span>
-                Is this thing on? No sessions have been found in the data directory. See the <a href="https://github.com/finchvox/finchvox#troubleshooting" target="_blank" class="text-orange-400 underline hover:text-orange-300 transition-colors">troubleshooting guide</a>.
-                <div x-show="dataDir && dataDir.length > 0" class="block mt-2 text-white/70">
-                    Data directory: <span class="font-mono text-xs" x-text="dataDir"></span>
-                </div>
-            </span>
-        </div>
+        <section x-cloak x-show="showUploadSection" x-transition class="sessions-upload-card">
+            <div>
+                <div class="sessions-upload-title">Import a Finchvox session bundle</div>
+                <div class="sessions-upload-hint">Useful for moving a captured replay between machines without sending it to a hosted service.</div>
+            </div>
+            <form @submit.prevent="uploadSession" class="sessions-upload-form">
+                <label class="sessions-file-picker">
+                    <input type="file" accept=".zip" @change="uploadFile = $event.target.files[0]" :disabled="uploading">
+                    <span x-text="uploadFile ? uploadFile.name : 'Choose .zip'"></span>
+                </label>
+                <button type="submit" class="sessions-primary-button" :disabled="!uploadFile || uploading">
+                    <span x-show="!uploading">Import</span>
+                    <span x-show="uploading">Importing…</span>
+                </button>
+                <span x-show="uploadError" class="sessions-upload-error" x-text="uploadError"></span>
+            </form>
+        </section>
 
-        <div class="bg-white/[0.02] rounded-lg border border-white/10 overflow-hidden" x-show="sessions.length > 0">
-        <table class="w-full border-collapse">
-            <thead>
-                <tr class="border-b border-white/10 text-white/50 text-left">
-                    <th class="py-4 px-6 text-xs font-medium tracking-wide">Service Name</th>
-                    <th class="py-4 px-6 text-xs font-medium tracking-wide">Session ID</th>
-                    <th class="py-4 px-6 text-xs font-medium tracking-wide">Start Time</th>
-                    <th class="py-4 px-6 text-xs font-medium tracking-wide">Duration</th>
-                    <th class="py-4 px-6 text-xs font-medium tracking-wide">Audio</th>
-                    <th class="py-4 px-6 text-xs font-medium tracking-wide">Turns</th>
-                    <th class="py-4 px-6 text-xs font-medium tracking-wide">Logs</th>
-                    <th class="py-4 px-6 text-xs font-medium tracking-wide"></th>
-                </tr>
-            </thead>
-            <tbody>
-                <template x-for="session in sessions" :key="session.session_id">
-                    <tr class="border-b border-white/5 transition-colors even:bg-[#0f0f0f] hover:bg-amber-500/[0.08]">
-                        <td class="py-4 px-6 text-white/70 text-sm" x-text="session.service_name || '-'"></td>
-                        <td class="py-4 px-6 text-white/70 font-mono text-[13px]">
-                            <a class="text-amber-400 underline hover:text-amber-300 transition-colors" :href="`/sessions/${session.session_id}`" x-text="session.session_id"></a>
-                        </td>
-                        <td class="py-4 px-6 text-white/70 text-sm" x-text="formatDate(session.start_time)"></td>
-                        <td class="py-4 px-6 text-white/70 text-sm" x-text="formatDuration(session.duration_ms)"></td>
-                        <td class="py-4 px-6 text-white/70 text-sm" x-text="session.audio_size_mb !== null ? session.audio_size_mb + ' MB' : '—'"></td>
-                        <td class="py-4 px-6 text-white/70 text-sm" x-text="session.trace.turn_count > 0 ? formatCount(session.trace.turn_count) : '—'"></td>
-                        <td class="py-4 px-6 text-white/70 text-sm" x-text="formatCount(session.log_count)"></td>
-                        <td class="py-4 px-6 text-white/70 text-sm">
+        <section x-cloak x-show="sessions.length === 0" class="sessions-empty">
+            <div class="sessions-empty-icon"><svg class="icon icon-lg" aria-hidden="true"><use href="/images/icons.svg#audio"/></svg></div>
+            <h2>No sessions yet</h2>
+            <p>Start Finchvox, connect your LiveKit agent to the local OTLP endpoint, then make a call. The replay will appear here automatically.</p>
+            <code x-show="dataDir" x-text="dataDir"></code>
+        </section>
 
-                        </td>
-                    </tr>
-                </template>
-            </tbody>
-        </table>
-        </div>
-
-        <div x-show="totalPages > 1" class="flex items-center justify-center gap-4 mt-6">
-            <button @click="previousPage()"
-                    :disabled="!hasPreviousPage || loading"
-                    class="flex items-center gap-1.5 px-3 py-1.5 text-xs font-mono rounded border transition-all duration-200"
-                    :class="hasPreviousPage && !loading ? 'bg-white/5 text-white/70 border-white/10 hover:bg-white/10 hover:text-white cursor-pointer' : 'bg-white/[0.02] text-white/30 border-white/5 cursor-not-allowed'">
-                <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" class="w-3.5 h-3.5">
-                    <path stroke-linecap="round" stroke-linejoin="round" d="M15.75 19.5 8.25 12l7.5-7.5" />
-                </svg>
-                Prev
-            </button>
-            <span class="text-white/50 text-xs font-mono" x-text="`Page ${currentPage} of ${totalPages}`"></span>
-            <button @click="nextPage()"
-                    :disabled="!hasNextPage || loading"
-                    class="flex items-center gap-1.5 px-3 py-1.5 text-xs font-mono rounded border transition-all duration-200"
-                    :class="hasNextPage && !loading ? 'bg-white/5 text-white/70 border-white/10 hover:bg-white/10 hover:text-white cursor-pointer' : 'bg-white/[0.02] text-white/30 border-white/5 cursor-not-allowed'">
-                Next
-                <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" class="w-3.5 h-3.5">
-                    <path stroke-linecap="round" stroke-linejoin="round" d="m8.25 4.5 7.5 7.5-7.5 7.5" />
-                </svg>
-            </button>
-        </div>
+        <section x-cloak x-show="sessions.length > 0" class="sessions-table-shell">
+            <div class="sessions-table-caption">
+                <span x-text="pageCaption()">Recent sessions</span>
+                <span class="sessions-data-dir" x-show="dataDir" x-text="dataDir"></span>
+            </div>
+            <div class="sessions-table-scroll">
+                <table class="sessions-table">
+                    <thead>
+                        <tr>
+                            <th>Agent / service</th>
+                            <th>Session</th>
+                            <th>Started</th>
+                            <th>Duration</th>
+                            <th>Turns</th>
+                            <th>Logs</th>
+                            <th>Errors</th>
+                            <th>Audio</th>
+                            <th aria-label="Open"></th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <template x-for="session in sessions" :key="session.session_id">
+                            <tr class="sessions-row" @click="window.location.href = `/sessions/${session.session_id}`" tabindex="0"
+                                @keydown.enter="window.location.href = `/sessions/${session.session_id}`">
+                                <td>
+                                    <div class="sessions-service-cell">
+                                        <span class="sessions-platform-dot" :class="`platform-${session.platform || 'pipecat'}`"></span>
+                                        <div>
+                                            <div class="sessions-service-name" x-text="session.service_name || 'Voice agent'"></div>
+                                            <span class="sessions-platform-badge" :class="`platform-${session.platform || 'pipecat'}`" x-text="(session.platform || 'pipecat').toUpperCase()"></span>
+                                        </div>
+                                    </div>
+                                </td>
+                                <td class="sessions-id-cell"><a class="sessions-id-link" :href="`/sessions/${session.session_id}`" @click.stop x-text="session.session_id"></a></td>
+                                <td class="sessions-muted" data-label="Started" x-text="formatStart(session.start_time)"></td>
+                                <td class="sessions-mono" data-label="Duration" x-text="formatDuration(session.duration_ms)"></td>
+                                <td class="sessions-mono" data-label="Turns" x-text="session.trace.turn_count > 0 ? formatCount(session.trace.turn_count) : '—'"></td>
+                                <td class="sessions-mono" data-label="Logs" x-text="formatCount(session.log_count)"></td>
+                                <td data-label="Errors">
+                                    <span class="sessions-error-pill" :class="{ 'has-errors': (session.error_count || 0) > 0 }" x-text="session.error_count || 0"></span>
+                                </td>
+                                <td class="sessions-mono" data-label="Audio" x-text="session.audio_size_mb !== null ? session.audio_size_mb + ' MB' : '—'"></td>
+                                <td class="sessions-open-arrow"><svg class="icon" aria-hidden="true"><use href="/images/icons.svg#chevron-right"/></svg></td>
+                            </tr>
+                        </template>
+                    </tbody>
+                </table>
+            </div>
+            <nav class="sessions-pager" x-show="totalPages > 1" aria-label="Session pages">
+                <button type="button" class="chrome-button" @click="goToPage(currentPage - 1)" :disabled="!hasPreviousPage || loading">
+                    <svg class="icon" aria-hidden="true"><use href="/images/icons.svg#arrow-left"/></svg><span>Previous</span>
+                </button>
+                <span class="sessions-pager-status" x-text="`Page ${currentPage} of ${totalPages}`"></span>
+                <button type="button" class="chrome-button" @click="goToPage(currentPage + 1)" :disabled="!hasNextPage || loading">
+                    <span>Next</span><svg class="icon" aria-hidden="true"><use href="/images/icons.svg#arrow-right"/></svg>
+                </button>
+            </nav>
+        </section>
     </main>
 
     <script src="/js/sessions_list.js"></script>

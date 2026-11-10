@@ -1,159 +1,25 @@
 function logsViewMixin() {
-    const LOG_PANEL_WIDTH_STORAGE_KEY = 'finchvox.inspectLogPanel.width';
-    const DEFAULT_LOG_PANEL_WIDTH_PX = 400;
-    const MIN_LOG_PANEL_WIDTH_PX = 320;
-    const MAX_LOG_PANEL_WIDTH_PX = 900;
-    const VALID_HASH_VIEWS = ['trace', 'conversation', 'metrics'];
-
     return {
-        _formattedLogBodyCache: new WeakMap(),
         logCopied: false,
-        selectedView: 'logs',
+        selectedView: 'conversation',
         logs: [],
         selectedLog: null,
         highlightedLogIndex: -1,
         isLogPanelOpen: false,
-        logPanelWidth: DEFAULT_LOG_PANEL_WIDTH_PX,
-        logPanelIsResizing: false,
-        _logPanelResizeCleanup: null,
-        _logPanelPrevBodyStyle: null,
-        _logPanelWindowResizeHandler: null,
         logsLoading: false,
         logsTotalCount: 0,
         logsLimit: 1000,
         traceStartTime: null,
         logSearchQuery: '',
-        logLevelFilters: {
-            DEBUG: true,
-            INFO: true,
-            WARN: true,
-            ERROR: true
-        },
+        // Which levels show at first, from Settings.
+        logLevelFilters: { ...window.FinchvoxPreferences.load().logLevels },
 
         initLogsView() {
-            const hash = window.location.hash.slice(1);
-            if (VALID_HASH_VIEWS.includes(hash)) {
-                this.selectedView = hash;
-            }
-
-            this.initLogPanelSizing();
-        },
-
-        initLogPanelSizing() {
-            try {
-                const storedWidth = Number(localStorage.getItem(LOG_PANEL_WIDTH_STORAGE_KEY));
-                if (Number.isFinite(storedWidth) && storedWidth > 0) {
-                    this.logPanelWidth = storedWidth;
-                }
-            } catch {
-                // Ignore storage failures (e.g. privacy mode / blocked storage)
-            }
-            this.logPanelWidth = this.clampLogPanelWidth(this.logPanelWidth);
-
-            if (!this._logPanelWindowResizeHandler) {
-                this._logPanelWindowResizeHandler = () => {
-                    this.logPanelWidth = this.clampLogPanelWidth(this.logPanelWidth);
-                };
-                window.addEventListener('resize', this._logPanelWindowResizeHandler);
-            }
-        },
-
-        clampLogPanelWidth(widthPx) {
-            const viewportWidth = document.documentElement?.clientWidth || window.innerWidth || 0;
-
-            const minWidth = Math.min(
-                MIN_LOG_PANEL_WIDTH_PX,
-                Math.max(240, viewportWidth - 80),
-                viewportWidth
-            );
-            const maxCap = Math.min(MAX_LOG_PANEL_WIDTH_PX, viewportWidth);
-            const preferredMax = Math.max(minWidth, viewportWidth - 240);
-            const maxWidth = Math.min(maxCap, preferredMax);
-            const safeWidth = Number.isFinite(widthPx) ? widthPx : DEFAULT_LOG_PANEL_WIDTH_PX;
-
-            return Math.min(maxWidth, Math.max(minWidth, safeWidth));
-        },
-
-        setLogPanelWidth(widthPx, { persist = true } = {}) {
-            this.logPanelWidth = this.clampLogPanelWidth(widthPx);
-            if (persist) {
-                try {
-                    localStorage.setItem(LOG_PANEL_WIDTH_STORAGE_KEY, String(Math.round(this.logPanelWidth)));
-                } catch {
-                }
-            }
-        },
-
-        _saveBodyStyleForLogResize() {
-            this._logPanelPrevBodyStyle = {
-                userSelect: document.body.style.userSelect,
-                cursor: document.body.style.cursor
-            };
-            document.body.style.userSelect = 'none';
-            document.body.style.cursor = 'col-resize';
-        },
-
-        _restoreBodyStyleAfterLogResize() {
-            if (this._logPanelPrevBodyStyle) {
-                document.body.style.userSelect = this._logPanelPrevBodyStyle.userSelect ?? '';
-                document.body.style.cursor = this._logPanelPrevBodyStyle.cursor ?? '';
-            }
-            this._logPanelPrevBodyStyle = null;
-        },
-
-        _finishLogPanelResize() {
-            if (!this.logPanelIsResizing) return;
-            this.logPanelIsResizing = false;
-            this.setLogPanelWidth(this.logPanelWidth, { persist: true });
-            this._restoreBodyStyleAfterLogResize();
-            if (this._logPanelResizeCleanup) {
-                this._logPanelResizeCleanup();
-                this._logPanelResizeCleanup = null;
-            }
-        },
-
-        _shouldIgnoreLogResizeEvent(event) {
-            if (!event) return true;
-            if (event.pointerType === 'mouse' && event.button !== 0) return true;
-            if (this._logPanelResizeCleanup) return true;
-            return false;
-        },
-
-        _getLogViewportWidth() {
-            return document.documentElement?.clientWidth || window.innerWidth || 0;
-        },
-
-        _trySetLogPointerCapture(event) {
-            try {
-                event.target?.setPointerCapture?.(event.pointerId);
-            } catch {
-            }
-        },
-
-        startLogPanelResize(event) {
-            if (this._shouldIgnoreLogResizeEvent(event)) return;
-
-            this.logPanelIsResizing = true;
-            this._saveBodyStyleForLogResize();
-
-            const updateFromPointer = (clientX) => {
-                const desiredWidth = this._getLogViewportWidth() - clientX;
-                this.setLogPanelWidth(desiredWidth, { persist: false });
-            };
-
-            const onMove = (e) => updateFromPointer(e.clientX);
-            const finish = () => this._finishLogPanelResize();
-
-            document.addEventListener('pointermove', onMove);
-            document.addEventListener('pointerup', finish, { once: true });
-            document.addEventListener('pointercancel', finish, { once: true });
-
-            this._logPanelResizeCleanup = () => {
-                document.removeEventListener('pointermove', onMove);
-            };
-
-            this._trySetLogPointerCapture(event);
-            updateFromPointer(event.clientX);
+            // "#trace?span=<id>" links to a span, so only the part before "?" names the tab.
+            const view = window.location.hash.slice(1).split('?')[0];
+            const views = ['trace', 'conversation', 'logs', 'metrics', 'environment'];
+            // A link to a specific tab wins; otherwise open the tab chosen in Settings.
+            this.selectedView = views.includes(view) ? view : window.FinchvoxPreferences.load().defaultView;
         },
 
         loadLogsIfNeeded() {
@@ -204,11 +70,14 @@ function logsViewMixin() {
             if (view === 'metrics') {
                 this.loadMetricsIfNeeded();
             }
+
+            if (view === 'environment') {
+                this.loadEnvironmentIfNeeded();
+            }
         },
 
         async loadLogs() {
             this.logsLoading = true;
-            this._formattedLogBodyCache = new WeakMap();
 
             try {
                 const response = await fetch(`/api/sessions/${this.sessionId}/logs?limit=${this.logsLimit}`);
@@ -237,13 +106,14 @@ function logsViewMixin() {
 
             this.highlightLog(log);
 
-            if (this.wavesurfer && this.duration) {
-                const isPlaying = this.wavesurfer.isPlaying();
+            const player = this.getAudioPlayer();
+            if (player && this.duration) {
+                const isPlaying = player.isPlaying();
                 if (!isPlaying) {
                     const relativeNanos = log.time_unix_nano - this.traceStartTime;
                     const audioTime = relativeNanos / 1_000_000_000;
                     const progress = audioTime / this.duration;
-                    this.wavesurfer.seekTo(progress);
+                    player.seekTo(progress);
                     this.currentTime = audioTime;
                 }
             }
@@ -264,8 +134,10 @@ function logsViewMixin() {
                 }
 
                 if (this.logSearchQuery) {
-                    const body = this.getLogSearchText(log).toLowerCase();
-                    if (!body.includes(this.logSearchQuery.toLowerCase())) {
+                    const needle = this.logSearchQuery.toLowerCase();
+                    const body = logMessageFormatter.getSearchText(log).toLowerCase();
+                    const logger = this.getLogLogger(log).toLowerCase();
+                    if (!body.includes(needle) && !logger.includes(needle)) {
                         return false;
                     }
                 }
@@ -295,7 +167,7 @@ function logsViewMixin() {
                 hour: '2-digit',
                 minute: '2-digit',
                 second: '2-digit',
-                hour12: true
+                hour12: this.preferences.timeFormat === '12h'
             };
             const formatted = date.toLocaleString('en-US', options);
             const ms = date.getMilliseconds().toString().padStart(3, '0');
@@ -314,25 +186,23 @@ function logsViewMixin() {
             return levelColors[level.toUpperCase()] || 'text-white/70';
         },
 
-        getLogSearchText(log) {
-            return logMessageFormatter.getSearchText(log);
+        getLogLogger(log) {
+            if (!log) return '';
+            const loggerAttr = (log.attributes || []).find(attr => attr?.key === 'logger.name');
+            const attrValue = loggerAttr?.value?.string_value;
+            return attrValue || log.instrumentation_scope?.name || log.resource?.attributes?.find(attr => attr?.key === 'service.name')?.value?.string_value || '';
         },
 
-        getLogPreview(log) {
-            return logMessageFormatter.getPreviewText(log);
-        },
-
+        // The message laid out for reading (Python dicts indented, escaped
+        // newlines decoded), shown in the log inspector.
         getLogBody(log) {
             if (!log) return '';
+            return logMessageFormatter.formatLogBody(logMessageFormatter.getLogBodyValue(log));
+        },
 
-            const cached = this._formattedLogBodyCache.get(log);
-            if (cached !== undefined) return cached;
-
-            const formattedBody = logMessageFormatter.formatLogBody(
-                logMessageFormatter.getLogBodyValue(log)
-            );
-            this._formattedLogBodyCache.set(log, formattedBody);
-            return formattedBody;
+        // One line, cut at 220 characters, for the log table.
+        getLogPreview(log) {
+            return logMessageFormatter.getPreviewText(log);
         },
 
         getRawLogJSON(log) {

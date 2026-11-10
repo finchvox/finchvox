@@ -1,7 +1,9 @@
 import sys
+
 from loguru import logger
-from .server import run_server
+
 from .config import LOG_LEVEL
+from .server import run_server
 
 
 def main():

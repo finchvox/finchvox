@@ -1,0 +1,13 @@
+[project]
+name = "pipecat-finchvox-chaos"
+version = "0.0.1"
+description = "A Pipecat example with chaos/failure injection for testing"
+requires-python = ">=3.12,<3.15"
+dependencies = [
+    "pipecat-ai[daily,webrtc,websocket,silero,cartesia,deepgram,openai,tracing,runner]>=1.14.0,<2",
+    "python-dotenv>=1.2.4,<2",
+    "finchvox",
+]
+
+[tool.uv.sources]
+finchvox = { path = "../../..", editable = true }

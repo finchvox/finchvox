@@ -5,6 +5,8 @@ from unittest.mock import patch
 
 import pytest
 
+pytest.importorskip("apscheduler")
+
 from finchvox.scheduler import (
     compress_pending_sessions,
     find_sessions_to_compress,
@@ -195,6 +197,7 @@ class TestSchedulerLifecycle:
     @pytest.mark.asyncio
     async def test_scheduler_runs_immediately_on_start(self, temp_data_dir):
         import asyncio
+
         import finchvox.scheduler as sched_module
 
         sched_module._scheduler = None
