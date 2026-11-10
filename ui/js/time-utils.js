@@ -70,15 +70,17 @@ function formatDurationDays(absMs) {
  * Format a Unix timestamp to a human-readable date string.
  *
  * @param {number} timestamp - Unix timestamp in seconds
- * @returns {string} Formatted date string (e.g., "Jan 2, 05:44 PM")
+ * @param {boolean} [hour12] - 12-hour clock; defaults to the Settings preference
+ * @returns {string} Formatted date string (e.g., "Jan 2, 05:44 PM" or "Jan 2, 17:44")
  */
-function formatDate(timestamp) {
+function formatDate(timestamp, hour12 = window.FinchvoxPreferences ? window.FinchvoxPreferences.hour12() : true) {
     if (!timestamp) return '';
     const date = new Date(timestamp * 1000);  // Convert seconds to milliseconds
     return date.toLocaleString('en-US', {
         month: 'short',
         day: 'numeric',
         hour: '2-digit',
-        minute: '2-digit'
+        minute: '2-digit',
+        hour12
     });
 }

@@ -1,0 +1,9 @@
+# Optional LiveKit CLI project configuration.
+# Replace these placeholders for your own project, or generate this file with
+# the LiveKit CLI. Do not commit real project credentials/secrets.
+
+[project]
+subdomain = "your-project-subdomain"
+
+[agent]
+id = "your-agent-id"

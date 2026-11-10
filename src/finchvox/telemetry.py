@@ -1,7 +1,8 @@
+import asyncio
 import os
 import sys
-import asyncio
-from datetime import datetime, timezone
+from datetime import UTC, datetime
+
 import aiohttp
 from loguru import logger
 
@@ -12,10 +13,10 @@ _sent_events: set[str] = set()
 
 def get_version() -> str:
     try:
-        from importlib.metadata import version
+        from importlib.metadata import PackageNotFoundError, version
 
         return version("finchvox")
-    except Exception:
+    except PackageNotFoundError:
         return "unknown"
 
 
@@ -31,7 +32,7 @@ def get_os() -> str:
 
 
 def is_enabled() -> bool:
-    env_value = os.environ.get("FINCHVOX_TELEMETRY", "true").lower()
+    env_value = os.environ.get("FINCHVOX_TELEMETRY", "false").lower()
     return env_value not in ("false", "0", "no", "off")
 
 
@@ -43,18 +44,17 @@ async def _send_event_async(event_type: str) -> None:
         "event": event_type,
         "version": get_version(),
         "os": get_os(),
-        "timestamp": datetime.now(timezone.utc).isoformat(),
+        "timestamp": datetime.now(UTC).isoformat(),
     }
 
     try:
-        async with aiohttp.ClientSession() as session:
-            async with session.post(
-                TELEMETRY_URL, json=payload, timeout=aiohttp.ClientTimeout(total=5)
-            ) as response:
-                logger.debug(
-                    f"Telemetry sent: {event_type} (status: {response.status})"
-                )
-    except Exception as e:
+        async with aiohttp.ClientSession() as session, session.post(
+            TELEMETRY_URL, json=payload, timeout=aiohttp.ClientTimeout(total=5)
+        ) as response:
+            logger.debug(
+                f"Telemetry sent: {event_type} (status: {response.status})"
+            )
+    except (aiohttp.ClientError, TimeoutError, OSError) as e:
         logger.debug(f"Telemetry failed (non-fatal): {e}")
 
 

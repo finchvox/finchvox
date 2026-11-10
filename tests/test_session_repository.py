@@ -4,7 +4,7 @@ from pathlib import Path
 
 import pytest
 
-from finchvox.session_repository import SessionRepository, DEFAULT_PAGE_SIZE
+from finchvox.session_repository import DEFAULT_PAGE_SIZE, SessionRepository
 
 
 @pytest.fixture
@@ -135,3 +135,26 @@ class TestSessionRepository:
 
     def test_default_page_size_is_50(self):
         assert DEFAULT_PAGE_SIZE == 50
+
+    def test_totals_count_every_session_not_just_the_page(self, temp_sessions_dir):
+        # The sessions page shows these in its stat strip, so they must not
+        # shrink to the 50 sessions of the current page.
+        create_sessions(temp_sessions_dir, 3)
+        livekit_span = {"name": "agent_session", "start_time_unix_nano": 9_000_000_000_000_000_000}
+        failing_span = {
+            "name": "agent_turn",
+            "start_time_unix_nano": 9_100_000_000_000_000_000,
+            "status": {"code": "STATUS_CODE_ERROR", "message": "boom"},
+        }
+        for session_id, spans in (("lk1", [livekit_span, failing_span]), ("lk2", [livekit_span])):
+            session_dir = temp_sessions_dir / session_id
+            session_dir.mkdir(parents=True)
+            (session_dir / f"trace_{session_id}.jsonl").write_text(
+                "".join(json.dumps(span) + "\n" for span in spans)
+            )
+
+        result = SessionRepository(temp_sessions_dir, page_size=2).list_paginated(page=3)
+
+        assert len(result.sessions) == 1
+        assert result.totals == {"sessions": 5, "livekit": 2, "errors": 1}
+        assert result.to_dict()["totals"] == {"sessions": 5, "livekit": 2, "errors": 1}

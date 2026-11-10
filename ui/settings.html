@@ -1,0 +1,182 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="dark">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Settings - Finchvox</title>
+    <script src="/js/preferences.js"></script>
+    <link rel="stylesheet" href="/css/app.css">
+    <script defer src="/lib/alpine.min.js"></script>
+</head>
+<body class="sessions-body" x-data="settingsApp()">
+    <header class="sessions-header">
+        <a href="/" class="sessions-brand">
+            <img src="/images/finchvox-logo.png" alt="Finchvox" class="sessions-logo">
+            <div>
+                <div class="sessions-brand-title">Finchvox</div>
+                <div class="sessions-brand-subtitle">Local agent observability</div>
+            </div>
+        </a>
+        <div class="sessions-header-actions">
+            <a href="/" class="chrome-button">
+                <svg class="icon" aria-hidden="true"><use href="/images/icons.svg#arrow-left"/></svg>
+                <span>Sessions</span>
+            </a>
+        </div>
+    </header>
+
+    <main class="settings-main">
+        <section class="sessions-hero settings-hero">
+            <div>
+                <div class="sessions-eyebrow">SETTINGS</div>
+                <h1>Settings</h1>
+                <p>Display preferences are saved in this browser and apply as soon as you change them.</p>
+            </div>
+            <div class="settings-saved" :class="{ visible: justSaved }" role="status" aria-live="polite">
+                <svg class="icon" aria-hidden="true"><use href="/images/icons.svg#check"/></svg>
+                <span>Saved in this browser</span>
+            </div>
+        </section>
+
+        <section class="settings-card" aria-labelledby="appearance-title">
+            <h2 id="appearance-title">Appearance</h2>
+
+            <div class="settings-row">
+                <div class="settings-label">
+                    <span>Theme</span>
+                    <small>Colours only; the layout stays the same.</small>
+                </div>
+                <div class="settings-control settings-themes" role="radiogroup" aria-label="Theme">
+                    <template x-for="theme in themes" :key="theme.value">
+                        <button type="button" class="theme-option" role="radio"
+                                :aria-checked="prefs.theme === theme.value" :class="{ active: prefs.theme === theme.value }"
+                                @click="update({ theme: theme.value })">
+                            <span class="theme-swatches" aria-hidden="true">
+                                <template x-for="colour in theme.swatch" :key="colour"><i :style="`background:${colour}`"></i></template>
+                            </span>
+                            <span class="theme-name" x-text="theme.label"></span>
+                            <small x-text="theme.hint"></small>
+                        </button>
+                    </template>
+                </div>
+            </div>
+
+            <div class="settings-row">
+                <div class="settings-label">
+                    <span>Text size</span>
+                    <small>Scales all text, including charts.</small>
+                </div>
+                <div class="settings-control segmented" role="radiogroup" aria-label="Text size">
+                    <template x-for="size in textSizes" :key="size.value">
+                        <button type="button" role="radio" :aria-checked="prefs.textSize === size.value"
+                                :class="{ active: prefs.textSize === size.value }"
+                                @click="update({ textSize: size.value })" x-text="size.label"></button>
+                    </template>
+                </div>
+            </div>
+
+            <div class="settings-row">
+                <div class="settings-label">
+                    <span>Time format</span>
+                    <small>Session start times and log timestamps.</small>
+                </div>
+                <div class="settings-control segmented" role="radiogroup" aria-label="Time format">
+                    <template x-for="format in timeFormats" :key="format.value">
+                        <button type="button" role="radio" :aria-checked="prefs.timeFormat === format.value"
+                                :class="{ active: prefs.timeFormat === format.value }"
+                                @click="update({ timeFormat: format.value })" x-text="format.label"></button>
+                    </template>
+                </div>
+            </div>
+        </section>
+
+        <section class="settings-card" aria-labelledby="session-view-title">
+            <h2 id="session-view-title">Session view</h2>
+
+            <div class="settings-row">
+                <label class="settings-label" for="default-view">
+                    <span>Open sessions on</span>
+                    <small>A link to a specific tab still opens that tab.</small>
+                </label>
+                <div class="settings-control">
+                    <select id="default-view" class="insights-input settings-select"
+                            :value="prefs.defaultView" @change="update({ defaultView: $event.target.value })">
+                        <template x-for="view in views" :key="view.value">
+                            <option :value="view.value" x-text="view.label" :selected="prefs.defaultView === view.value"></option>
+                        </template>
+                    </select>
+                </div>
+            </div>
+
+            <div class="settings-row">
+                <div class="settings-label">
+                    <span>Trace tab</span>
+                    <small>Hidden spans are wrappers and lifecycle steps, such as job_entrypoint and llm_node.</small>
+                </div>
+                <label class="settings-control settings-check">
+                    <input type="checkbox" :checked="prefs.showAllSpans" @change="update({ showAllSpans: $event.target.checked })">
+                    <span>Start with all spans shown</span>
+                </label>
+            </div>
+
+            <div class="settings-row">
+                <div class="settings-label">
+                    <span>Log levels shown</span>
+                    <small>Which levels the Logs tab shows at first.</small>
+                </div>
+                <div class="settings-control settings-levels">
+                    <template x-for="level in logLevels" :key="level">
+                        <label class="settings-check">
+                            <input type="checkbox" :checked="prefs.logLevels[level]" @change="toggleLevel(level)">
+                            <span x-text="level"></span>
+                        </label>
+                    </template>
+                </div>
+            </div>
+
+            <div class="settings-row">
+                <label class="settings-label" for="slow-reply">
+                    <span>Mark replies as slow at</span>
+                    <small>Agent turns at or above this get "· slow" in the Trace tab.</small>
+                </label>
+                <div class="settings-control settings-number">
+                    <input id="slow-reply" type="number" class="insights-input" step="0.1"
+                           :min="slowRange.min" :max="slowRange.max" :value="prefs.slowReplySeconds"
+                           @change="setSlowReply($event.target)">
+                    <span>seconds</span>
+                </div>
+            </div>
+        </section>
+
+        <section class="settings-card" aria-labelledby="server-title">
+            <h2 id="server-title">Server</h2>
+            <p class="settings-note">
+                Set when Finchvox starts, with command-line flags or <code>compose.yaml</code>, so they can't be changed here.
+                Finchvox has no login, so letting any page change them would let other websites change them too.
+            </p>
+            <div x-show="serverError" class="settings-note settings-error" x-text="serverError"></div>
+            <p x-show="server?.in_container" class="settings-note">
+                Finchvox is running in a container, so its ports may be published on different ones on this machine
+                (<code>FINCHVOX_HTTP_PORT</code> and <code>FINCHVOX_GRPC_PORT</code> in <code>compose.yaml</code>).
+                The UI port below is the one this page was opened on. By default, <code>compose.yaml</code> makes
+                Finchvox reachable from this machine only.
+            </p>
+            <dl class="server-grid" x-show="server">
+                <div><dt>Version</dt><dd x-text="server?.version"></dd></div>
+                <div><dt>Data folder</dt><dd x-text="server?.data_dir"></dd></div>
+                <div><dt>UI and uploads port</dt><dd x-text="httpPortText()"></dd></div>
+                <div><dt>Traces and logs port</dt><dd x-text="grpcPortText()"></dd></div>
+                <div><dt>Listening on</dt><dd x-text="hostText()"></dd></div>
+                <div><dt>Upload limit</dt><dd x-text="server ? `${server.max_upload_mb} MB` : ''"></dd></div>
+                <div><dt>Telemetry</dt><dd x-text="server?.telemetry_enabled ? 'On' : 'Off'"></dd></div>
+            </dl>
+        </section>
+
+        <div class="settings-footer">
+            <button type="button" class="chrome-button" @click="resetAll()">Reset display preferences</button>
+        </div>
+    </main>
+
+    <script src="/js/settings.js"></script>
+</body>
+</html>

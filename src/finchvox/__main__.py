@@ -9,9 +9,10 @@ Usage:
 
 import argparse
 from pathlib import Path
-from finchvox.cli import get_version
+
+from finchvox.cli import add_max_upload_argument, get_version
+from finchvox.collector.config import BYTES_PER_MB, GRPC_PORT, get_default_data_dir
 from finchvox.server import UnifiedServer
-from finchvox.collector.config import GRPC_PORT, get_default_data_dir
 
 
 def main():
@@ -25,6 +26,7 @@ Examples:
   python -m finchvox --port 8000               # Use custom HTTP port
   python -m finchvox --grpc-port 4318          # Use custom gRPC port
   python -m finchvox --data-dir ./my-data      # Use custom data directory
+  python -m finchvox --max-upload-mb 4096      # Allow session uploads up to 4 GB
         """,
     )
     parser.add_argument(
@@ -37,7 +39,7 @@ Examples:
         help=f"gRPC server port (default: {GRPC_PORT})",
     )
     parser.add_argument(
-        "--host", type=str, default="0.0.0.0", help="Host to bind to (default: 0.0.0.0)"
+        "--host", type=str, default="127.0.0.1", help="Host to bind to (default: 127.0.0.1)"
     )
     parser.add_argument(
         "--data-dir",
@@ -45,6 +47,7 @@ Examples:
         default=None,
         help="Data directory for traces/logs/audio/exceptions (default: ~/.finchvox)",
     )
+    add_max_upload_argument(parser)
 
     args = parser.parse_args()
 
@@ -61,10 +64,15 @@ Examples:
     print(f"  - Collector: http://{args.host}:{args.port}/collector")
     print(f"gRPC Server:  {args.host}:{args.grpc_port}")
     print(f"Data Directory: {data_dir}")
+    print(f"Max Upload: {args.max_upload_mb} MB")
     print("=" * 50)
 
     server = UnifiedServer(
-        port=args.port, grpc_port=args.grpc_port, host=args.host, data_dir=data_dir
+        port=args.port,
+        grpc_port=args.grpc_port,
+        host=args.host,
+        data_dir=data_dir,
+        max_upload_bytes=args.max_upload_mb * BYTES_PER_MB,
     )
     server.run()
 

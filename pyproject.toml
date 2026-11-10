@@ -1,44 +1,51 @@
 [project]
 name = "finchvox"
-version = "0.0.17"
-description = "Voice AI observability dev tool for Pipecat"
+version = "0.0.18"
+description = "Local Voice AI session replay and observability for LiveKit Agents and Pipecat"
 readme = "README.md"
 license = "MIT"
-requires-python = ">=3.11"
+requires-python = ">=3.12,<3.15"
 dependencies = [
-    "grpcio>=1.60.0",
-    "opentelemetry-proto>=1.27.0",
-    "opentelemetry-exporter-otlp-proto-grpc>=1.27.0",
-    "opentelemetry-sdk>=1.27.0",
-    "opentelemetry-instrumentation-logging>=0.48b0",
-    "protobuf>=4.25.0",
-    "loguru>=0.7.0",
-    "fastapi>=0.115.0",
-    "uvicorn[standard]>=0.32.0",
-    "python-multipart>=0.0.9",
-    "aiofiles>=24.1.0",
-    "aiohttp>=3.9.0",
-    "pipecat-ai[cartesia,daily,deepgram,silero]>=0.0.98",
-    "aiortc>=1.14.0",
-    "apscheduler>=3.10.0",
-    "packaging>=21.0",
+    "grpcio>=1.84.1,<2",
+    "opentelemetry-proto>=1.45.1,<2",
+    "opentelemetry-exporter-otlp-proto-grpc>=1.45.1,<2",
+    "opentelemetry-sdk>=1.45.1,<2",
+    "opentelemetry-instrumentation-logging>=0.66b1,<0.67",
+    "protobuf>=5.29.6,<7",
+    "loguru>=0.7.3,<0.8",
+    "fastapi>=0.162.0,<1",
+    "starlette>=1.6.0,<2",
+    "uvicorn[standard]>=0.54.0,<1",
+    "python-multipart>=0.0.32,<0.1",
+    "aiofiles>=25.1.0,<26",
+    "aiohttp>=3.14.5,<4",
+    "apscheduler>=3.11.3,<4",
+    "livekit-protocol>=1.1.28,<2",
 ]
 
 [project.scripts]
 finchvox = "finchvox.cli:main"
 
 [project.optional-dependencies]
+pipecat = [
+    "pipecat-ai[cartesia,daily,deepgram,silero,tracing]>=1.14.0,<2",
+    "aiortc>=1.15.0,<2",
+]
 dev = [
-    "pytest>=7.0.0",
-    "pytest-asyncio>=0.23.0",
-    "pytest-cov>=4.0.0",
-    "pre-commit>=4.0.0",
-    "ruff>=0.14.10",
-    "twine>=6.2.0",
+    "pytest>=9.1.1,<10",
+    "pytest-asyncio>=1.4.0,<2",
+    "pytest-cov>=7.1.0,<8",
+    "pre-commit>=4.7.0,<5",
+    "ruff>=0.17.2,<0.18",
+    "twine>=7.0.0,<8",
+    "httpx2>=2.16.0,<3",
+]
+livekit = [
+    "livekit-agents>=1.8.9,<2",
 ]
 
 [build-system]
-requires = ["hatchling"]
+requires = ["hatchling>=1.32.4,<2"]
 build-backend = "hatchling.build"
 
 [tool.hatch.build.targets.wheel]
@@ -46,3 +53,6 @@ packages = ["src/finchvox"]
 
 [tool.hatch.build.targets.wheel.force-include]
 "ui" = "finchvox/ui"
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]

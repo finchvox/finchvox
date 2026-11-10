@@ -1,7 +1,9 @@
 import json
 from pathlib import Path
+
+from google.protobuf.json_format import MessageToDict, SerializeToJsonError
 from loguru import logger
-from google.protobuf.json_format import MessageToDict
+
 from finchvox.collector.config import get_session_dir
 
 
@@ -36,8 +38,9 @@ class LogWriter:
                 f.write("\n")
 
             logger.debug(f"Wrote log to {log_file}")
-        except Exception as e:
-            logger.error(f"Failed to write log: {e}", exc_info=True)
+        except (OSError, SerializeToJsonError, TypeError, ValueError) as e:
+            # One unwritable log must not drop the rest of its export batch.
+            logger.exception(f"Failed to write log: {e}")
 
     def _convert_log_to_dict(self, log_record, resource_logs, scope_logs):
         """Convert protobuf log record to dictionary."""

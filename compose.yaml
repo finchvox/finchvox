@@ -1,0 +1,33 @@
+# Runs the Finchvox server. See docs/DOCKER.md.
+#
+#   docker compose up -d --build     start, rebuilding the image if needed
+#   docker compose logs -f           follow the server output
+#   docker compose down              stop (sessions stay in the volume)
+
+services:
+  finchvox:
+    build:
+      context: .
+      args:
+        # Set to "true" to compress Pipecat audio chunks into audio.opus.
+        INSTALL_FFMPEG: ${FINCHVOX_INSTALL_FFMPEG:-false}
+    image: finchvox:local
+    command:
+      - finchvox
+      - start
+      - --host
+      - 0.0.0.0
+      - --data-dir
+      - /data
+      - --max-upload-mb
+      - ${FINCHVOX_MAX_UPLOAD_MB:-1024}
+    ports:
+      # 127.0.0.1 keeps these on this machine only: Finchvox has no login.
+      - "127.0.0.1:${FINCHVOX_HTTP_PORT:-3000}:3000"   # UI and HTTP uploads
+      - "127.0.0.1:${FINCHVOX_GRPC_PORT:-4317}:4317"   # traces and logs (OTLP/gRPC)
+    volumes:
+      - finchvox-data:/data
+    restart: unless-stopped
+
+volumes:
+  finchvox-data:

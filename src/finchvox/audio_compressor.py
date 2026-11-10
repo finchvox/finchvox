@@ -1,5 +1,6 @@
 import shutil
 import subprocess
+import wave
 from pathlib import Path
 
 from loguru import logger
@@ -39,6 +40,14 @@ def check_ffmpeg_available() -> bool:
 
 
 def compress_to_opus(input_wav: Path, output_opus: Path) -> bool:
+    """Compress to Opus, creating output_opus only once it is complete.
+
+    Playback and the scheduler both treat audio.opus as a finished recording, so
+    ffmpeg writes under another name and the file is renamed when it succeeds. If the
+    server dies midway, the leftover is overwritten by the next attempt. The dot
+    prefix marks it as work in progress, which session downloads leave out.
+    """
+    partial_opus = output_opus.with_name(f".{output_opus.stem}.partial.opus")
     try:
         subprocess.run(
             [
@@ -52,16 +61,19 @@ def compress_to_opus(input_wav: Path, output_opus: Path) -> bool:
                 "32k",
                 "-application",
                 "voip",
-                str(output_opus),
+                str(partial_opus),
             ],
             check=True,
             capture_output=True,
         )
+        partial_opus.replace(output_opus)
         logger.info(f"Compressed audio to {output_opus.name}")
         return True
     except subprocess.CalledProcessError as e:
         logger.error(f"ffmpeg compression failed: {e.stderr.decode()}")
         return False
+    finally:
+        partial_opus.unlink(missing_ok=True)
 
 
 class AudioCompressor:
@@ -92,11 +104,12 @@ class AudioCompressor:
             f"Compressing audio for session {session_id[:8]}... ({len(chunks)} chunks)"
         )
 
-        merged_wav = session_dir / "audio_merged.wav"
+        merged_wav = session_dir / ".audio_merged.wav"
         try:
             combine_chunks(chunks, merged_wav)
-        except Exception as e:
-            logger.error(f"Failed to merge audio chunks: {e}")
+        except (OSError, wave.Error, EOFError) as e:
+            logger.exception(f"Failed to merge audio chunks: {e}")
+            merged_wav.unlink(missing_ok=True)
             return False
 
         output_opus = session_dir / "audio.opus"

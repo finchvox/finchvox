@@ -1,9 +1,10 @@
 import json
-from opentelemetry.proto.trace.v1.trace_pb2 import Span
-from opentelemetry.proto.resource.v1.resource_pb2 import Resource
-from opentelemetry.proto.trace.v1.trace_pb2 import ScopeSpans
+from pathlib import Path
+
 from opentelemetry.proto.common.v1.common_pb2 import InstrumentationScope, KeyValue
-from opentelemetry.proto.trace.v1.trace_pb2 import ResourceSpans
+from opentelemetry.proto.resource.v1.resource_pb2 import Resource
+from opentelemetry.proto.trace.v1.trace_pb2 import ResourceSpans, ScopeSpans, Span
+
 from finchvox.collector.writer import SpanWriter
 
 
@@ -178,3 +179,51 @@ def test_trace_id_hex_conversion(tmp_path):
     with trace_file.open() as f:
         data = json.loads(f.readline())
         assert data["trace_id_hex"] == expected_hex
+
+
+def test_write_error_does_not_propagate_to_the_export_batch(tmp_path, monkeypatch):
+    """Test that a disk error on one span is logged rather than raised."""
+    writer = SpanWriter(tmp_path)
+
+    span = Span()
+    span.trace_id = b"\xcd" * 16
+    span.span_id = b"\x01" * 8
+
+    def failing_open(self, *args, **kwargs):
+        raise OSError("disk full")
+
+    monkeypatch.setattr(Path, "open", failing_open)
+
+    writer.write_span(span, create_mock_resource_spans(), create_mock_scope_spans())
+
+
+def test_appending_span_does_not_read_existing_trace_file(tmp_path, monkeypatch):
+    """Test that write cost does not grow with the size of the trace file."""
+    writer = SpanWriter(tmp_path)
+    resource_spans = create_mock_resource_spans()
+    scope_spans = create_mock_scope_spans()
+
+    span = Span()
+    span.trace_id = b"\xab" * 16
+    span.span_id = b"\x01" * 8
+    span.name = "first-span"
+    writer.write_span(span, resource_spans, scope_spans)
+
+    opened_modes = []
+    real_open = Path.open
+
+    def recording_open(self, mode="r", *args, **kwargs):
+        opened_modes.append(mode)
+        return real_open(self, mode, *args, **kwargs)
+
+    monkeypatch.setattr(Path, "open", recording_open)
+    span.span_id = b"\x02" * 8
+    span.name = "second-span"
+    writer.write_span(span, resource_spans, scope_spans)
+    monkeypatch.undo()
+
+    assert opened_modes == ["a"]
+    trace_id_hex = span.trace_id.hex()
+    trace_file = tmp_path / "sessions" / trace_id_hex / f"trace_{trace_id_hex}.jsonl"
+    names = [json.loads(line)["name"] for line in trace_file.read_text().splitlines()]
+    assert names == ["first-span", "second-span"]

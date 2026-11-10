@@ -1,9 +1,11 @@
 import json
 from pathlib import Path
+
+from google.protobuf.json_format import MessageToDict, SerializeToJsonError
 from loguru import logger
-from google.protobuf.json_format import MessageToDict
-from finchvox.collector.config import get_session_dir
+
 from finchvox import telemetry
+from finchvox.collector.config import get_session_dir
 
 
 class SpanWriter:
@@ -39,20 +41,15 @@ class SpanWriter:
                     f"New session {trace_id_hex} - first span type: {span_name}"
                 )
                 telemetry.send_event("session_ingest")
-            else:
-                with trace_file.open("r") as f:
-                    span_count = sum(1 for _ in f)
-                logger.info(
-                    f"Session {trace_id_hex[:8]}... - adding span #{span_count + 1}"
-                )
 
             with trace_file.open("a") as f:
                 json.dump(span_dict, f)
                 f.write("\n")
 
             logger.debug(f"Wrote span {span.span_id.hex()} to {trace_file}")
-        except Exception as e:
-            logger.error(f"Failed to write span: {e}", exc_info=True)
+        except (OSError, SerializeToJsonError, TypeError, ValueError) as e:
+            # One unwritable span must not drop the rest of its export batch.
+            logger.exception(f"Failed to write span: {e}")
 
     def _convert_span_to_dict(self, span, resource_spans, scope_spans):
         """Convert protobuf span to dictionary, preserving all fields."""

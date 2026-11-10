@@ -43,8 +43,11 @@ htmlcov/
 
 # Project-specific
 traces/
+.finchvox-data/
 PLANNING.md
 TODO.md
+# Personal working notes, kept out of the public repository
+private/
 
 # Environment variables
 .env

@@ -1,9 +1,8 @@
-import asyncio
 import io
 import json
+import struct
 import wave
 from datetime import datetime
-from typing import TYPE_CHECKING, Optional
 
 import aiohttp
 from loguru import logger
@@ -23,16 +22,6 @@ from pipecat.processors.frame_processor import (
     FrameProcessorSetup,
 )
 
-from finchvox.compat import HAS_NEW_TRACING_API
-
-if TYPE_CHECKING:
-    from pipecat.utils.tracing.tracing_context import TracingContext
-
-if not HAS_NEW_TRACING_API:
-    from pipecat.utils.tracing.conversation_context_provider import (
-        ConversationContextProvider,
-    )
-
 
 def _is_finchvox_initialized() -> bool:
     import finchvox
@@ -48,7 +37,7 @@ class FinchvoxProcessor(FrameProcessor):
     collector for playback and debugging in the web UI.
 
     Requires ``finchvox.init()`` to be called before the pipeline starts and
-    ``enable_tracing=True`` on the ``PipelineTask``.
+    ``enable_tracing=True`` on the ``PipelineWorker``.
 
     Example::
 
@@ -84,19 +73,22 @@ class FinchvoxProcessor(FrameProcessor):
         self._chunk_duration = chunk_duration_seconds
         self._sample_rate = sample_rate
 
-        self._audio_buffer: Optional[AudioBufferProcessor] = None
+        self._audio_buffer: AudioBufferProcessor | None = None
         self._disabled = False
         self._collector_warning_shown = False
         self._timing_events = []
-        self._conversation_start_time: Optional[datetime] = None
+        self._conversation_start_time: datetime | None = None
         self._chunk_counter = 0
-        self._setup_info: Optional[FrameProcessorSetup] = None
+        self._setup_info: FrameProcessorSetup | None = None
+        self._tracing_context = None
+        self._tracing_enabled: bool | None = None
         self._input_frame_count = 0
-        self._tracing_context: Optional["TracingContext"] = None
 
     async def setup(self, setup: FrameProcessorSetup):
         await super().setup(setup)
         self._setup_info = setup
+        self._tracing_context = setup.tracing_context
+        self._tracing_enabled = setup.enable_tracing
 
     async def process_frame(self, frame: Frame, direction: FrameDirection):
         await super().process_frame(frame, direction)
@@ -144,20 +136,13 @@ class FinchvoxProcessor(FrameProcessor):
             self._disabled = True
             return
 
-        if not frame.enable_tracing:
+        if not self._tracing_enabled:
             logger.error(
                 "FinchvoxProcessor requires tracing to be enabled. "
-                "Add enable_tracing=True to your PipelineTask."
+                "Add enable_tracing=True to your PipelineWorker."
             )
             self._disabled = True
             return
-
-        if HAS_NEW_TRACING_API:
-            self._tracing_context = getattr(frame, "tracing_context", None)
-            if self._tracing_context:
-                import finchvox
-
-                finchvox.set_tracing_context(self._tracing_context)
 
         self._audio_buffer = AudioBufferProcessor(
             sample_rate=self._sample_rate,
@@ -224,35 +209,27 @@ class FinchvoxProcessor(FrameProcessor):
                 if len(self._timing_events) > 100:
                     self._timing_events = self._timing_events[-50:]
 
-            except Exception as e:
-                logger.error(f"Failed to process audio chunk: {e}", exc_info=True)
-
-    def _extract_trace_id_from_context(self, ctx) -> Optional[str]:
-        if not ctx:
-            return None
-        span = trace.get_current_span(ctx)
-        span_context = span.get_span_context()
-        if span_context.trace_id == 0:
-            return None
-        return format(span_context.trace_id, "032x")
+            except Exception as e:  # noqa: BLE001 - pipecat event handler: audio capture must never crash the user's pipeline
+                logger.exception(f"Failed to process audio chunk: {e}")
 
     def _get_trace_id(self) -> str:
         try:
-            if HAS_NEW_TRACING_API:
-                ctx = (
-                    self._tracing_context.get_conversation_context()
-                    if self._tracing_context
-                    else None
-                )
-            else:
-                provider = ConversationContextProvider.get_instance()
-                ctx = provider.get_current_conversation_context()
-            trace_id = self._extract_trace_id_from_context(ctx)
-            if trace_id:
-                return trace_id
-        except Exception:
-            pass
+            conversation_context = self._get_conversation_context()
+
+            if conversation_context:
+                span = trace.get_current_span(conversation_context)
+                span_context = span.get_span_context()
+                if span_context.trace_id != 0:
+                    return format(span_context.trace_id, "032x")
+        except Exception as e:  # noqa: BLE001 - tracing-context lookup is best-effort and must never crash the user's pipeline
+            logger.debug(f"Could not resolve trace id, using 'no_trace': {e}")
+
         return "no_trace"
+
+    def _get_conversation_context(self):
+        if self._tracing_context is not None:
+            return self._tracing_context.get_conversation_context()
+        return None
 
     async def _upload_chunk(
         self,
@@ -313,14 +290,19 @@ class FinchvoxProcessor(FrameProcessor):
                 )
                 self._collector_warning_shown = True
             return False
-        except asyncio.TimeoutError:
+        except TimeoutError:
             logger.error(f"Timeout uploading chunk {chunk_number} to endpoint")
             return False
-        except Exception as e:
-            logger.error(
-                f"Error uploading chunk {chunk_number} to endpoint: {e}",
-                exc_info=True,
-            )
+        except (
+            aiohttp.ClientError,
+            wave.Error,
+            struct.error,
+            OSError,
+            KeyError,
+            TypeError,
+            ValueError,
+        ) as e:
+            logger.exception(f"Error uploading chunk {chunk_number} to endpoint: {e}")
             return False
 
     async def _handle_end_frame(self, frame: Frame):
@@ -333,7 +315,7 @@ class FinchvoxProcessor(FrameProcessor):
             f"with {len(self._timing_events)} timing events"
         )
 
-    def add_timing_event(self, event_type: str, metadata: dict = None):
+    def add_timing_event(self, event_type: str, metadata: dict | None = None):
         event = {
             "type": event_type,
             "timestamp": datetime.now().isoformat(),

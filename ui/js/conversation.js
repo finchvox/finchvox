@@ -1,6 +1,8 @@
 function conversationViewMixin() {
     return {
         conversationMessages: [],
+        conversationEvents: [],
+        conversationSource: null,
         conversationLoading: false,
         conversationError: null,
 
@@ -13,7 +15,9 @@ function conversationViewMixin() {
                 if (!response.ok) throw new Error(`HTTP ${response.status}`);
 
                 const data = await response.json();
-                this.conversationMessages = data.messages;
+                this.conversationMessages = data.messages || [];
+                this.conversationEvents = data.events || [];
+                this.conversationSource = data.source || null;
             } catch (error) {
                 console.error('Failed to load conversation:', error);
                 this.conversationError = error.message;
@@ -34,12 +38,13 @@ function conversationViewMixin() {
 
             const messageMs = Number(message.timestamp) / 1_000_000;
 
-            if (this.wavesurfer && this.duration) {
-                const isPlaying = this.wavesurfer.isPlaying();
+            const player = this.getAudioPlayer();
+            if (player && this.duration) {
+                const isPlaying = player.isPlaying();
                 if (!isPlaying) {
                     const audioTime = (messageMs - this.minTime) / 1000;
                     const progress = audioTime / this.duration;
-                    this.wavesurfer.seekTo(Math.max(0, Math.min(1, progress)));
+                    player.seekTo(Math.max(0, Math.min(1, progress)));
                     this.currentTime = audioTime;
                 }
             }

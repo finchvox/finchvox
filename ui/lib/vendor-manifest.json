@@ -1,0 +1,62 @@
+{
+  "schema_version": 1,
+  "packages": [
+    {
+      "name": "alpinejs",
+      "version": "3.17.5",
+      "license": "MIT",
+      "tarball": "https://registry.npmjs.org/alpinejs/-/alpinejs-3.17.5.tgz",
+      "integrity": "sha512-XewMqRC6zjy8iaUPn86dxjvooAsNai3hUtQbdn0A5H2w7Jt10xHGZ1SczN5+Dvp3UKkuSEt9moy/UaUWOwKdnQ==",
+      "member": "package/dist/cdn.min.js",
+      "file": "alpine.min.js",
+      "payload_sha256": "b4036e9e9ac22fa6f6ae1ba292e015e1f3e9c85d0d79e73e4c8eb9bb139b522e"
+    },
+    {
+      "name": "wavesurfer.js",
+      "version": "8.0.3",
+      "license": "BSD-3-Clause",
+      "tarball": "https://registry.npmjs.org/wavesurfer.js/-/wavesurfer.js-8.0.3.tgz",
+      "integrity": "sha512-DLRSw/NoIlyFxMzmiGlwGJaEn44p8DiCRyKYjbPxGa3QjdTrCxa0CvAH+/TEijrzcZ/w2GVt8wM80WFsPtnPVw==",
+      "member": "package/dist/wavesurfer.min.js",
+      "file": "wavesurfer.min.js",
+      "payload_sha256": "0ec6a7f1837df15459767cfe753c36a476d1053f77a0f05ef9113a486e22f8e4"
+    },
+    {
+      "name": "chart.js",
+      "version": "4.6.1",
+      "license": "MIT",
+      "tarball": "https://registry.npmjs.org/chart.js/-/chart.js-4.6.1.tgz",
+      "integrity": "sha512-hJyniucsFmq//EvXYvJ6c6mahPoI3kaxdjVH8awTaJ/fDNWeSqqqArixMJWkWNN6fcYvPU3HneSANFNYtRi61g==",
+      "member": "package/dist/chart.umd.js",
+      "file": "chart.min.js",
+      "payload_sha256": "338399fb5bafe598d21cfc471b0590b61ceb321a985fade4f68499b151f67fbf"
+    }
+  ],
+  "notices": [
+    {
+      "title": "Alpine.js 3.17.5",
+      "url": "https://raw.githubusercontent.com/alpinejs/alpine/v3.17.5/LICENSE.md",
+      "sha256": "08b7502da6e7aa1d0bbdc97d220fbf669b9366c61bd0f072238283c89bc4773a"
+    },
+    {
+      "title": "Vue reactivity/shared 3.5.41 (embedded in Alpine's released bundle)",
+      "url": "https://raw.githubusercontent.com/vuejs/core/v3.5.41/LICENSE",
+      "sha256": "49190d1f742dd61e47fe816df4963e5186a2a62100d9122f9883a60ea32973ac"
+    },
+    {
+      "title": "Chart.js 4.6.1",
+      "package": "chart.js",
+      "member": "package/LICENSE.md"
+    },
+    {
+      "title": "@kurkle/color 0.3.2 (embedded in Chart.js's released bundle)",
+      "url": "https://raw.githubusercontent.com/kurkle/color/v0.3.2/LICENSE.md",
+      "sha256": "2859c50313bad2ba77b081410c477beaf92b60ca13a77a248d89859a6dd6ac81"
+    },
+    {
+      "title": "wavesurfer.js 8.0.3",
+      "package": "wavesurfer.js",
+      "member": "package/LICENSE"
+    }
+  ]
+}

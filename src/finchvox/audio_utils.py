@@ -5,14 +5,25 @@ This module provides functions for finding and combining audio chunks
 from voice conversation traces.
 """
 
+import tempfile
 import wave
 from pathlib import Path
-from typing import List, Tuple
 
 from loguru import logger
 
+from finchvox.collector.config import FINALIZED_AUDIO_EXTENSIONS
 
-def find_chunks(sessions_dir: Path, session_id: str) -> List[Tuple[int, Path]]:
+
+def find_finalized_audio(session_dir: Path) -> Path | None:
+    """Return the session's finished recording, the one every reader should use."""
+    for extension in FINALIZED_AUDIO_EXTENSIONS:
+        candidate = session_dir / f"audio{extension}"
+        if candidate.exists():
+            return candidate
+    return None
+
+
+def find_chunks(sessions_dir: Path, session_id: str) -> list[tuple[int, Path]]:
     """
     Find all audio chunks for a given session_id.
 
@@ -39,7 +50,24 @@ def find_chunks(sessions_dir: Path, session_id: str) -> List[Tuple[int, Path]]:
     return chunks
 
 
-def combine_chunks(chunks: List[Tuple[int, Path]], output_file: Path) -> None:
+def combine_chunks_to_temp_file(chunks: list[tuple[int, Path]]) -> Path:
+    """Combine chunks into a new temp WAV file, which the caller must delete.
+
+    The temp file is removed here if combining fails, for example on a corrupt chunk.
+    """
+    with tempfile.NamedTemporaryFile(suffix=".wav", delete=False) as tmp:
+        tmp_path = Path(tmp.name)
+
+    try:
+        combine_chunks(chunks, tmp_path)
+    except BaseException:
+        tmp_path.unlink(missing_ok=True)
+        raise
+
+    return tmp_path
+
+
+def combine_chunks(chunks: list[tuple[int, Path]], output_file: Path) -> None:
     """
     Combine audio chunks into a single WAV file.
 

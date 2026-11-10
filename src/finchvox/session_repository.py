@@ -2,7 +2,9 @@ import math
 from dataclasses import dataclass
 from pathlib import Path
 
-from finchvox.session import Session
+from loguru import logger
+
+from finchvox.session import MALFORMED_SESSION_ERRORS, Session
 
 DEFAULT_PAGE_SIZE = 50
 
@@ -17,6 +19,9 @@ class PaginatedSessions:
     has_previous_page: bool
     has_next_page: bool
     data_dir: str
+    # Counted over every session, not only this page: the sessions page shows
+    # them in its stat strip.
+    totals: dict[str, int]
 
     def to_dict(self) -> dict:
         return {
@@ -28,6 +33,7 @@ class PaginatedSessions:
             "has_previous_page": self.has_previous_page,
             "has_next_page": self.has_next_page,
             "data_dir": self.data_dir,
+            "totals": self.totals,
         }
 
 
@@ -54,12 +60,20 @@ class SessionRepository:
             try:
                 session = Session(session_dir)
                 sessions.append(session.to_dict())
-            except Exception as e:
-                print(f"Error reading session {session_dir}: {e}")
+            except MALFORMED_SESSION_ERRORS:
+                logger.exception(f"Could not read session {session_dir}")
                 continue
 
         sessions.sort(key=lambda s: s.get("start_time") or 0, reverse=True)
         return sessions
+
+    @staticmethod
+    def _totals(sessions: list[dict]) -> dict[str, int]:
+        return {
+            "sessions": len(sessions),
+            "livekit": sum(1 for s in sessions if s.get("platform") == "livekit"),
+            "errors": sum(s.get("error_count") or 0 for s in sessions),
+        }
 
     def list_paginated(self, page: int = 1) -> PaginatedSessions:
         all_sessions = self._load_all_sessions()
@@ -81,4 +95,5 @@ class SessionRepository:
             has_previous_page=page > 1,
             has_next_page=page < total_pages,
             data_dir=str(self.sessions_base_dir),
+            totals=self._totals(all_sessions),
         )
